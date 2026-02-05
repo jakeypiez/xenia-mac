@@ -112,3 +112,5 @@ node_modules/.bin/
 /cache0
 /devkit
 recent.toml
+analysis/Bean.xex.export.txt
+stdout

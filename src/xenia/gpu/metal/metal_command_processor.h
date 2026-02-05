@@ -490,6 +490,15 @@ class MetalCommandProcessor : public CommandProcessor {
   bool ff_blend_factor_valid_ = false;
   std::chrono::steady_clock::time_point last_cache_stats_log_time_{};
 
+  // FPS tracking
+  uint64_t fps_frame_count_ = 0;
+  uint64_t fps_total_frame_count_ = 0;
+  std::chrono::steady_clock::time_point fps_last_log_time_{};
+  std::chrono::steady_clock::time_point fps_start_time_{};
+  double fps_min_frame_time_ms_ = 1e9;
+  double fps_max_frame_time_ms_ = 0.0;
+  std::chrono::steady_clock::time_point fps_last_frame_time_{};
+
   std::filesystem::path shader_storage_root_;
   std::filesystem::path shader_storage_local_root_;
   std::filesystem::path shader_storage_title_root_;

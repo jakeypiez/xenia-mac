@@ -23,12 +23,15 @@ namespace ui {
 
 namespace {
 
+// Returns empty vector if wildcard (*.*) is present (meaning allow all files).
+// Otherwise returns the specific extensions to filter by.
 std::vector<std::string> ParseAllowedExtensions(std::string_view patterns) {
   // Input examples from callers:
   //   "*.iso;*.xex;*.*"
   //   "*.xtr"
   //   "*.*"
   std::vector<std::string> extensions;
+  bool has_wildcard = false;
   size_t start = 0;
   while (start < patterns.size()) {
     size_t end = patterns.find(';', start);
@@ -44,8 +47,9 @@ std::vector<std::string> ParseAllowedExtensions(std::string_view patterns) {
       token.remove_suffix(1);
     }
 
-    // Ignore wildcard matches.
+    // Track wildcard matches - if present, we'll allow all files.
     if (token == "*" || token == "*.*") {
+      has_wildcard = true;
       start = end + 1;
       continue;
     }
@@ -65,6 +69,12 @@ std::vector<std::string> ParseAllowedExtensions(std::string_view patterns) {
     }
 
     start = end + 1;
+  }
+
+  // If wildcard was present, return empty to allow all files (including those
+  // without extensions, like STFS containers).
+  if (has_wildcard) {
+    return {};
   }
 
   return extensions;

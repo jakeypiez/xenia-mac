@@ -54,11 +54,12 @@ class MetalPrimitiveProcessor : public PrimitiveProcessor {
  private:
   MetalCommandProcessor& command_processor_;
 
+  // Stores buffer + offset for each converted index buffer allocation
+  // within the current frame. The handle is an index into this vector.
   struct ConvertedIndexBufferBinding {
     MTL::Buffer* buffer = nullptr;
     uint64_t offset_bytes = 0;
   };
-
   std::vector<ConvertedIndexBufferBinding> converted_index_buffers_;
   uint64_t current_frame_ = 0;
 
@@ -68,9 +69,11 @@ class MetalPrimitiveProcessor : public PrimitiveProcessor {
   size_t builtin_index_buffer_size_ = 0;
 
   // Per-frame index buffer for primitive conversion
+  // Uses ring buffer approach to allow multiple allocations per frame
   struct FrameIndexBuffer {
     MTL::Buffer* buffer = nullptr;
     size_t size = 0;
+    size_t used_this_frame = 0;  // How many bytes used in current frame
     uint64_t last_frame_used = 0;
   };
   std::vector<FrameIndexBuffer> frame_index_buffers_;

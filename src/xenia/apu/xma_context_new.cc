@@ -621,10 +621,17 @@ const kPacketInfo XmaContextNew::GetPacketInfo(uint8_t* packet,
   if (xma::IsPacketXma2Type(packet)) {
     const uint8_t xma2_frame_count = xma::GetPacketFrameCount(packet);
     if (xma2_frame_count != packet_info.frame_count_) {
-      XELOGE(
-          "XmaContext {}: XMA2 packet header defines different amount of "
-          "frames than internally found! (Header: {} Found: {})",
-          id(), xma2_frame_count, packet_info.frame_count_);
+      // Rate-limit this warning as it can spam the log heavily
+      xma2_frame_mismatch_count_++;
+      if (xma2_frame_mismatch_count_ == 1 ||
+          (xma2_frame_mismatch_count_ % kXma2MismatchLogInterval) == 0) {
+        XELOGW(
+            "XmaContext {}: XMA2 packet header defines different amount of "
+            "frames than internally found! (Header: {} Found: {}) "
+            "[occurrence #{}]",
+            id(), xma2_frame_count, packet_info.frame_count_,
+            xma2_frame_mismatch_count_);
+      }
     }
   }
   return packet_info;

@@ -8,6 +8,28 @@ local sdl2_sys_libdirs = {}
 local third_party_path = os.getcwd()
 local sdl2_config = os.getenv("SDL2_CONFIG") or "sdl2-config"
 
+-- Helper function to detect if we're on an ARM64 Mac
+local function is_macos_arm64_host()
+  if not os.istarget("macosx") then
+    return false
+  end
+  local sysctl = os.outputof("sysctl -n hw.optional.arm64 2>/dev/null")
+  if sysctl then
+    local sysctl_value = sysctl:match("^(%d+)")
+    if sysctl_value == "1" then
+      return true
+    end
+  end
+  local machine = os.outputof("uname -m")
+  if machine then
+    local machine_value = machine:match("^(%S+)")
+    if machine_value == "arm64" then
+      return true
+    end
+  end
+  return false
+end
+
 if os.istarget("windows") then
   -- build ourselves
   include("SDL2-static.lua")
@@ -21,6 +43,14 @@ else
         target_arch == "x86_64" or target_arch == "x64" or
         option_arch == "x86_64" or option_arch == "x64"
     local want_arm = target_arch == "arm64" or option_arch == "arm64"
+    -- If neither arch is specified, detect from host
+    if not want_x86 and not want_arm then
+      if is_macos_arm64_host() then
+        want_arm = true
+      else
+        want_x86 = true
+      end
+    end
     if want_x86 and os.isfile("/usr/local/bin/sdl2-config") then
       sdl2_config = "/usr/local/bin/sdl2-config"
     elseif want_arm and os.isfile("/opt/homebrew/bin/sdl2-config") then
@@ -52,6 +82,14 @@ if os.istarget("macosx") then
       target_arch == "x86_64" or target_arch == "x64" or
       option_arch == "x86_64" or option_arch == "x64"
   local want_arm = target_arch == "arm64" or option_arch == "arm64"
+  -- If neither arch is specified, detect from host
+  if not want_x86 and not want_arm then
+    if is_macos_arm64_host() then
+      want_arm = true
+    else
+      want_x86 = true
+    end
+  end
   if want_x86 and os.isdir("/usr/local/opt/sdl2/lib") then
     table.insert(sdl2_sys_libdirs, "/usr/local/opt/sdl2/lib")
   elseif want_arm and os.isdir("/opt/homebrew/opt/sdl2/lib") then

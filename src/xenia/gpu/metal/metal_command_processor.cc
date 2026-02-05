@@ -1418,10 +1418,20 @@ bool MetalCommandProcessor::InitializePipelineBinaryArchive(
 
   MTL::BinaryArchiveDescriptor* desc =
       MTL::BinaryArchiveDescriptor::alloc()->init();
-  NS::String* path_string =
-      NS::String::string(archive_path.string().c_str(), NS::UTF8StringEncoding);
-  NS::URL* url = NS::URL::fileURLWithPath(path_string);
-  desc->setUrl(url);
+
+  // Check if the archive file exists - if not, we need to create an empty one
+  // by setting the URL to nullptr
+  bool archive_exists = std::filesystem::exists(archive_path);
+  if (archive_exists) {
+    NS::String* path_string =
+        NS::String::string(archive_path.string().c_str(), NS::UTF8StringEncoding);
+    NS::URL* url = NS::URL::fileURLWithPath(path_string);
+    desc->setUrl(url);
+  } else {
+    // Create a new empty binary archive by not setting a URL
+    desc->setUrl(nullptr);
+    XELOGI("Creating new Metal binary archive (file does not exist yet)");
+  }
 
   NS::Error* error = nullptr;
   pipeline_binary_archive_ = device_->newBinaryArchive(desc, &error);
@@ -1434,7 +1444,7 @@ bool MetalCommandProcessor::InitializePipelineBinaryArchive(
     return false;
   }
   pipeline_binary_archive_path_ = archive_path;
-  pipeline_binary_archive_dirty_ = false;
+  pipeline_binary_archive_dirty_ = !archive_exists;  // Mark dirty if newly created
   return true;
 }
 
@@ -1615,6 +1625,55 @@ void MetalCommandProcessor::PrewarmPipelineBinaryArchive(
 void MetalCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr,
                                       uint32_t frontbuffer_width,
                                       uint32_t frontbuffer_height) {
+  // FPS tracking
+  if (cvars::log_fps) {
+    auto now = std::chrono::steady_clock::now();
+    
+    // Initialize on first frame
+    if (fps_total_frame_count_ == 0) {
+      fps_start_time_ = now;
+      fps_last_log_time_ = now;
+      fps_last_frame_time_ = now;
+    }
+    
+    // Calculate frame time
+    double frame_time_ms = std::chrono::duration<double, std::milli>(
+        now - fps_last_frame_time_).count();
+    fps_last_frame_time_ = now;
+    
+    if (fps_total_frame_count_ > 0) {  // Skip first frame for frame time stats
+      fps_min_frame_time_ms_ = std::min(fps_min_frame_time_ms_, frame_time_ms);
+      fps_max_frame_time_ms_ = std::max(fps_max_frame_time_ms_, frame_time_ms);
+    }
+    
+    ++fps_frame_count_;
+    ++fps_total_frame_count_;
+    
+    // Log every N frames or every second
+    double elapsed_since_log = std::chrono::duration<double>(
+        now - fps_last_log_time_).count();
+    
+    if (elapsed_since_log >= 1.0 || 
+        fps_frame_count_ >= static_cast<uint64_t>(cvars::log_fps_interval_frames)) {
+      double fps = fps_frame_count_ / elapsed_since_log;
+      double avg_frame_time = elapsed_since_log * 1000.0 / fps_frame_count_;
+      double total_elapsed = std::chrono::duration<double>(
+          now - fps_start_time_).count();
+      double overall_fps = fps_total_frame_count_ / total_elapsed;
+      
+      XELOGI("FPS: {:.1f} | Avg: {:.2f}ms | Min: {:.2f}ms | Max: {:.2f}ms | "
+             "Total Frames: {} | Overall FPS: {:.1f}",
+             fps, avg_frame_time, fps_min_frame_time_ms_, fps_max_frame_time_ms_,
+             fps_total_frame_count_, overall_fps);
+      
+      // Reset per-interval stats
+      fps_frame_count_ = 0;
+      fps_last_log_time_ = now;
+      fps_min_frame_time_ms_ = 1e9;
+      fps_max_frame_time_ms_ = 0.0;
+    }
+  }
+
   ProcessCompletedSubmissions();
   saw_swap_ = true;
   last_swap_ptr_ = frontbuffer_ptr;

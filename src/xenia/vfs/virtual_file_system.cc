@@ -33,6 +33,7 @@ VirtualFileSystem::~VirtualFileSystem() {
 void VirtualFileSystem::Clear() {
   devices_.clear();
   symlinks_.clear();
+  negative_path_cache_.clear();
 }
 
 bool VirtualFileSystem::RegisterDevice(std::unique_ptr<Device> device) {
@@ -115,6 +116,11 @@ Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
   // Resolve relative paths
   auto normalized_path(xe::utf8::canonicalize_guest_path(path));
 
+  // Check negative cache first - if this path was not found before, skip lookup
+  if (negative_path_cache_.count(normalized_path) > 0) {
+    return nullptr;
+  }
+
   // Resolve symlinks.
   std::string resolved_path;
   if (ResolveSymbolicLink(normalized_path, resolved_path)) {
@@ -137,7 +143,17 @@ Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
 
   const auto& device = *it;
   auto relative_path = normalized_path.substr(device->mount_path().size());
-  return device->ResolvePath(relative_path);
+  Entry* result = device->ResolvePath(relative_path);
+
+  // If not found, add to negative cache to avoid future lookups
+  if (!result) {
+    // Limit cache size to prevent unbounded growth
+    if (negative_path_cache_.size() < kMaxNegativeCacheSize) {
+      negative_path_cache_.insert(std::string(path));
+    }
+  }
+
+  return result;
 }
 
 Entry* VirtualFileSystem::CreatePath(const std::string_view path,

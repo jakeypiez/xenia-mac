@@ -116,3 +116,8 @@ DEFINE_bool(metal_log_cache_stats, false,
             "Log Metal cache memory statistics periodically.", "GPU");
 DEFINE_int32(metal_log_cache_stats_interval_seconds, 5,
              "Interval in seconds for Metal cache stats logging.", "GPU");
+
+DEFINE_bool(log_fps, false,
+            "Log FPS statistics to the console every second.", "GPU");
+DEFINE_int32(log_fps_interval_frames, 60,
+             "Number of frames between FPS log outputs.", "GPU");

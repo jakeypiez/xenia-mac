@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "xenia/base/mutex.h"
@@ -63,6 +64,11 @@ class VirtualFileSystem {
   xe::global_critical_region global_critical_region_;
   std::vector<std::unique_ptr<Device>> devices_;
   std::unordered_map<std::string, std::string> symlinks_;
+
+  // Negative lookup cache - tracks paths that don't exist to avoid
+  // repeated expensive lookups for missing files (e.g., optional game content)
+  std::unordered_set<std::string> negative_path_cache_;
+  static constexpr size_t kMaxNegativeCacheSize = 4096;
 
   bool ResolveSymbolicLink(const std::string_view path, std::string& result);
 };

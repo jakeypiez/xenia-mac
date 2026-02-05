@@ -242,7 +242,8 @@ project("xenia-app")
     libdirs({
       metal_converter_libdir,
       dxilconv_libdir,
-      "/usr/local/lib",
+      sdl2_libdir,
+      lz4_libdir,
     })
     linkoptions({
       path.join(dxilconv_libdir, "libdxilconv.dylib"),
@@ -251,7 +252,8 @@ project("xenia-app")
       "@executable_path/../Frameworks",
       metal_converter_libdir,
       dxilconv_libdir,
-      "/usr/local/lib",
+      sdl2_libdir,
+      lz4_libdir,
     })
     linkoptions({
       "-Wl,-rpath,@executable_path/../Frameworks",

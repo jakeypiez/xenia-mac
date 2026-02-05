@@ -105,6 +105,10 @@ class XmaContextNew : public XmaContext {
 
   int32_t remaining_subframe_blocks_in_output_buffer_ = 0;
   uint8_t current_frame_remaining_subframes_ = 0;
+
+  // Rate-limit XMA2 packet frame count mismatch warnings
+  uint32_t xma2_frame_mismatch_count_ = 0;
+  static constexpr uint32_t kXma2MismatchLogInterval = 1000;
 };
 
 }  // namespace apu

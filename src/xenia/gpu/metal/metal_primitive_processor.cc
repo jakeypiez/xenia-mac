@@ -83,13 +83,13 @@ void MetalPrimitiveProcessor::BeginSubmission() {
 }
 
 void MetalPrimitiveProcessor::BeginFrame() {
-  // Clean up old frame index buffers
+  // Clean up old frame index buffers and reset usage for reusable ones
   ++current_frame_;
   uint64_t current_frame = current_frame_;
 
   frame_index_buffers_.erase(
       std::remove_if(frame_index_buffers_.begin(), frame_index_buffers_.end(),
-                     [current_frame](const FrameIndexBuffer& buffer) {
+                     [current_frame](FrameIndexBuffer& buffer) {
                        // Keep buffers used in the last 2 frames
                        if (current_frame - buffer.last_frame_used > 2) {
                          if (buffer.buffer) {
@@ -98,19 +98,28 @@ void MetalPrimitiveProcessor::BeginFrame() {
                          }
                          return true;
                        }
+                       // Reset usage for the new frame
+                       buffer.used_this_frame = 0;
                        return false;
                      }),
       frame_index_buffers_.end());
+
+  // Clear the per-frame buffer+offset bindings
+  converted_index_buffers_.clear();
 }
 
 void MetalPrimitiveProcessor::EndFrame() { ClearPerFrameCache(); }
 
 MTL::Buffer* MetalPrimitiveProcessor::GetConvertedIndexBuffer(
     size_t handle, uint64_t& offset_bytes_out) const {
-  // The handle is actually a pointer to the MTL::Buffer
-  MTL::Buffer* buffer = reinterpret_cast<MTL::Buffer*>(handle);
-  offset_bytes_out = 0;  // We use the full buffer from the start
-  return buffer;
+  // The handle is an index into the converted_index_buffers_ vector
+  if (handle >= converted_index_buffers_.size()) {
+    offset_bytes_out = 0;
+    return nullptr;
+  }
+  const auto& binding = converted_index_buffers_[handle];
+  offset_bytes_out = binding.offset_bytes;
+  return binding.buffer;
 }
 
 bool MetalPrimitiveProcessor::InitializeBuiltinIndexBuffer(
@@ -147,25 +156,32 @@ bool MetalPrimitiveProcessor::InitializeBuiltinIndexBuffer(
 void* MetalPrimitiveProcessor::RequestHostConvertedIndexBufferForCurrentFrame(
     xenos::IndexFormat format, uint32_t index_count, bool coalign_for_simd,
     uint32_t coalignment_original_address, size_t& backend_handle_out) {
-  // Calculate required size
+  // Calculate required size with alignment
   size_t element_size = format == xenos::IndexFormat::kInt16 ? sizeof(uint16_t)
                                                              : sizeof(uint32_t);
   size_t required_size = index_count * element_size;
 
   // Add padding for SIMD alignment if requested
-  if (coalign_for_simd) {
-    required_size += XE_GPU_PRIMITIVE_PROCESSOR_SIMD_SIZE;
-  }
+  size_t simd_padding = coalign_for_simd ? XE_GPU_PRIMITIVE_PROCESSOR_SIMD_SIZE : 0;
+  size_t total_required = required_size + simd_padding;
 
-  // Find or create a buffer large enough
+  // Align allocation to element size for proper GPU access
+  size_t alignment = std::max(element_size, size_t(16));
+
+  // Find or create a buffer with enough remaining space
   FrameIndexBuffer* chosen_buffer = nullptr;
+  size_t allocation_offset = 0;
   uint64_t current_frame = current_frame_;
 
-  // First try to find an existing buffer that's large enough
+  // First try to find an existing buffer with enough remaining space
   for (auto& frame_buffer : frame_index_buffers_) {
-    if (frame_buffer.size >= required_size &&
-        frame_buffer.last_frame_used != current_frame) {
+    // Align the current used offset
+    size_t aligned_offset = (frame_buffer.used_this_frame + alignment - 1) & ~(alignment - 1);
+    size_t remaining = frame_buffer.size > aligned_offset ? frame_buffer.size - aligned_offset : 0;
+
+    if (remaining >= total_required) {
       chosen_buffer = &frame_buffer;
+      allocation_offset = aligned_offset;
       break;
     }
   }
@@ -174,10 +190,10 @@ void* MetalPrimitiveProcessor::RequestHostConvertedIndexBufferForCurrentFrame(
   if (!chosen_buffer) {
     MTL::Device* device = command_processor_.GetMetalDevice();
 
-    // Round up to next power of 2 for better reuse
-    size_t allocation_size = required_size;
-    allocation_size = std::max(allocation_size, size_t(4096));
-    allocation_size = (allocation_size + 4095) & ~4095;  // Round to 4KB
+    // Allocate larger buffers to reduce allocation frequency
+    // Use at least 256KB or 4x the required size for better batching
+    size_t allocation_size = std::max({total_required * 4, size_t(256 * 1024), total_required});
+    allocation_size = (allocation_size + 4095) & ~4095;  // Round to 4KB page
 
     MTL::Buffer* new_buffer =
         device->newBuffer(allocation_size, MTL::ResourceStorageModeShared);
@@ -194,26 +210,33 @@ void* MetalPrimitiveProcessor::RequestHostConvertedIndexBufferForCurrentFrame(
              allocation_size);
     new_buffer->setLabel(NS::String::string(label, NS::UTF8StringEncoding));
 
-    frame_index_buffers_.push_back({new_buffer, allocation_size, 0});
+    frame_index_buffers_.push_back({new_buffer, allocation_size, 0, 0});
     chosen_buffer = &frame_index_buffers_.back();
+    allocation_offset = 0;
 
     XELOGI("Created new Metal index buffer for primitive conversion ({} bytes)",
            allocation_size);
   }
 
-  // Mark buffer as used this frame
+  // Mark buffer as used this frame and update usage
   chosen_buffer->last_frame_used = current_frame;
+  chosen_buffer->used_this_frame = allocation_offset + total_required;
 
-  // Return the buffer handle and CPU mapping
-  backend_handle_out = reinterpret_cast<size_t>(chosen_buffer->buffer);
-  void* cpu_buffer = chosen_buffer->buffer->contents();
+  // Calculate CPU pointer and GPU offset
+  void* cpu_buffer = static_cast<uint8_t*>(chosen_buffer->buffer->contents()) + allocation_offset;
+  uint64_t gpu_offset = allocation_offset;
 
   // Apply SIMD co-alignment if requested
   if (coalign_for_simd) {
-    ptrdiff_t offset =
+    ptrdiff_t coalignment_offset =
         GetSimdCoalignmentOffset(cpu_buffer, coalignment_original_address);
-    cpu_buffer = static_cast<uint8_t*>(cpu_buffer) + offset;
+    cpu_buffer = static_cast<uint8_t*>(cpu_buffer) + coalignment_offset;
+    gpu_offset += coalignment_offset;
   }
+
+  // Store the buffer+offset binding and return the handle (index into vector)
+  backend_handle_out = converted_index_buffers_.size();
+  converted_index_buffers_.push_back({chosen_buffer->buffer, gpu_offset});
 
   return cpu_buffer;
 }

@@ -42,6 +42,9 @@ DECLARE_bool(metal_texture_upload_via_blit);
 DECLARE_bool(metal_log_cache_stats);
 DECLARE_int32(metal_log_cache_stats_interval_seconds);
 
+DECLARE_bool(log_fps);
+DECLARE_int32(log_fps_interval_frames);
+
 DECLARE_bool(disassemble_pm4);
 
 #define XE_GPU_FINE_GRAINED_DRAW_SCOPES 1
