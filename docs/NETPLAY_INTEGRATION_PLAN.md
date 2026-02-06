@@ -1,8 +1,8 @@
 # Netplay Integration Plan (from AdrianCassar/xenia-canary v5.0.0)
 
-## Status: BUILD SUCCEEDED - All Phases Complete
+## Status: BUILD SUCCEEDED - All Phases Complete + Runtime Hardened
 
-**Last Updated:** February 7, 2026
+**Last Updated:** February 7, 2026 (Session 4)
 
 ### Current Progress Summary
 
@@ -13,10 +13,11 @@
 | 3 | Kernel Networking | ✅ Complete (full macOS implementations) |
 | 4 | XLiveAPI HTTP Client | ✅ Complete (HTTPS enabled via OpenSSL 3) |
 | 5 | Session Management | ✅ Complete (all files ported + macOS fixes) |
-| 6 | UI/UX and Config | ✅ Complete (NetplayConfigDialog, Network menu) |
+| 6 | UI/UX and Config | ✅ Complete (NetplayConfigDialog, Network menu, config persistence hardened) |
 | 7 | Build System Updates | ✅ Complete |
-| 8 | Validation | ✅ Build Succeeded (Debug, ARM64) — runtime testing pending |
+| 8 | Validation | ✅ Build Succeeded (Debug, ARM64) — UPnP verified, runtime crashes fixed |
 | 9 | Documentation | ✅ Up to date |
+| 10 | Runtime Hardening | ✅ Complete (UPnP overhaul, crash fixes, config persistence) |
 
 ### Recent Fixes (Feb 5, 2026 Late Session)
 
@@ -123,11 +124,41 @@
 - ✅ Replaced `assert_always()` in `CreateHostSession` unknown flags path with `XELOGE` + `return X_ERROR_FUNCTION_FAILED`
 - ✅ Replaced `assert_always()` in `JoinExistingSession` unknown type path with `XELOGW` + continue
 
+### Runtime Hardening (Feb 7, 2026 Session 4)
+
+**UPnP Discovery Overhaul (upnp.cc/.h, XLiveAPI.cpp):**
+
+The UPnP subsystem was completely overhauled to fix multiple runtime failures specific to macOS network discovery:
+
+- ✅ **Multicast interface binding**: `upnpDiscover()` now receives the local IP address as its `multicast_if` parameter (via `XLiveAPI::LocalIP_str()`), ensuring SSDP M-SEARCH packets are sent on the correct network interface instead of relying on the OS default route
+- ✅ **macOS Local Network permission**: Added `NSLocalNetworkUsageDescription` and `NSBonjourServices` (`_ssdp._udp.`) to `Info.plist` — macOS 15+ silently blocks multicast without these entitlements, causing `upnpDiscover()` to return no devices
+- ✅ **Use-after-free fix**: `DiscoverUPnPDevice()` now returns `std::string` instead of `const char*` — the previous code returned a pointer into the `UPNPDev` linked list which was freed by `freeUPNPDevlist()` before the caller could use it
+- ✅ **`active_` flag correctness**: `active_` is now only set to `true` after `SearchUPnP()` succeeds (previously it was set unconditionally before port mapping, meaning a failed discovery still reported UPnP as active)
+- ✅ **Retry loop with backoff**: `Initialize()` now attempts discovery up to 3 times with 3-second delays between attempts — this handles the macOS Local Network permission dialog, which causes the first `upnpDiscover()` call to fail while the user clicks "Allow"
+- ✅ **Deactivate/reactivate support**: Added `Deactivate()` method that deletes port mappings and resets state; the UI checkbox now calls `Deactivate()` when UPnP is unchecked, and triggers a full re-initialization when re-checked (via `RefreshPorts()`)
+- ✅ **Init ordering fix**: UPnP initialization in `XLiveAPI::Init()` now occurs *after* `DiscoverNetworkInterfaces()` / `SelectNetworkInterface()`, ensuring `LocalIP_str()` is populated before being passed to UPnP
+- ✅ **Background thread dispatch**: UPnP toggle in the config dialog dispatches initialization to a background thread (via `std::thread`) to avoid blocking the ImGui UI thread during the multi-second discovery process
+
+**Config Persistence Fix (emulator_window.cc):**
+- ✅ **Problem**: `cvars::upnp = upnp_enabled_` only changed the in-memory cvar value; `config::SaveConfig()` serializes `config_value_` which is only updated by `OVERRIDE_bool()` — but `OVERRIDE_*` macros reference `cv::cv_##name` statics that are only accessible in the translation unit where `DEFINE_bool` is called
+- ✅ **Solution**: Added `OverrideConfigVar<T>()` helper function that uses the `cvar::ConfigVars` global map to look up cvars by name string and call `UpdateConfigValue()` on the found entry — works from any translation unit
+- ✅ All 4 config toggles (UPnP, XStorage, logging, IP masking) now use `OverrideConfigVar` followed by `SaveConfig()`, ensuring settings persist to `xenia-canary.config.toml` across restarts
+
+**Dialog Threading Crash Fix (xam_ui.cc):**
+- ✅ **Problem**: `SigninUI` (and other XAM dialogs) were constructed on guest CPU threads; the `ImGuiDialog` base constructor immediately calls `AddDialog(this)`, which races with the UI thread's `ImGuiDrawer::Draw()` loop — resulting in SIGABRT inside `ImGui::Begin()` / `BeginPopupModal()`
+- ✅ **Solution**: Changed `xeXamDispatchDialogAsync<T>` to accept a `std::function<T*()>` factory instead of a raw `T*`; dialog construction is deferred to the UI thread via `CallInUIThread()` — guaranteeing `ImGuiDialog` registration only happens on the thread that owns the draw loop
+- ✅ Updated all 6 call sites: `SigninUI`, `CreateProfileUI`, `MessageBoxDialog` (mutable lambda for non-const string args), `GameAchievementsUI` (info struct copied into lambda), `GamercardUI` (×2, captured locals)
+
+**fmt Format Argument Crash Fix (user_tracker.cc):**
+- ✅ **Problem**: Three `XELOGW("{}: ...")` calls at lines 37, 53, and 542 had `{}` format placeholders but no arguments — `fmt::format` throws `fmt::format_error` on missing args → `std::terminate()` in noexcept context
+- ✅ **Solution**: Added the missing `__func__` argument to all three calls
+
 ### Remaining Work
 
-**All Phases Complete — Runtime Testing Pending**
+**All Phases Complete — Runtime Hardened**
 - All 9 phases of the netplay integration plan have been implemented
-- UI has been tested: backend connection works, IP addresses display correctly
+- Runtime hardening phase (Phase 10) addressed UPnP discovery, crash bugs, and config persistence
+- UI has been tested: backend connection works, IP addresses display correctly, UPnP port forwarding verified with MikroTik router
 - Session create/browse/join needs game-level testing
 
 **Known Limitations:**
@@ -135,6 +166,7 @@
 - `WSAEventSelect` is a no-op on macOS — netplay uses `poll()` instead; only affects games doing their own socket event waits
 - `GetMACaddress()` always returns random MAC (dead code below early return — same on all platforms)
 - All `assert_always()` calls in `XLiveAPI.cpp` are commented out — HTTP errors are logged but not fatal (prevents Debug build crashes on backend errors)
+- macOS requires "Allow" on Local Network permission dialog on first UPnP use; retry loop handles the delay automatically
 
 **xam_state.cc/.h Extensions:**
 - ✅ Added `GetUserIndexAssignedToProfileFromXUID(uint64_t xuid)` method
@@ -525,7 +557,8 @@ third_party/miniupnp.lua    - Premake config
 4. 🔲 Friends list and presence works (UI implemented, needs runtime verification).
 5. ✅ Network mode selector UI works (NetplayConfigDialog with mode-aware sections).
 6. 🔲 No regressions in offline titles (needs runtime verification).
-7. ✅ Core porting complete, documentation updated.
+7. ✅ Core porting complete, runtime hardened, documentation updated.
+8. ✅ UPnP port forwarding works end-to-end on macOS (multicast, Local Network permission, retry).
 
 ## Execution Order
 1. ✅ Fetch and analyze netplay source (v5.0.0 tag).
@@ -546,12 +579,22 @@ third_party/miniupnp.lua    - Premake config
 16. ✅ Add XexCheckExecutablePrivilege public function.
 17. ✅ Final build verification — BUILD SUCCEEDED (Debug, ARM64).
 18. ✅ Port UI components (NetplayConfigDialog with Network menu, mode-aware sections, config persistence).
-19. 🔲 Runtime test and validate (backend connection verified, game-level session testing pending).
-20. ✅ Document.
+19. ✅ Runtime hardening: UPnP overhaul, crash fixes (SigninUI threading, fmt args), config persistence (OverrideConfigVar).
+20. 🔲 Runtime test and validate (backend connection verified, UPnP verified, game-level session testing pending).
+21. ✅ Document.
 
-## Conclusion (UPDATED Feb 7, 2026)
+## Conclusion (UPDATED Feb 7, 2026 — Session 4)
 
-**Netplay port from v5.0.0 is complete — all phases implemented!**
+**Netplay port from v5.0.0 is complete and runtime-hardened!**
+
+### Session 4 Changes (7 files, commit `85e1b5d8f`):
+- `src/xenia/app/Info.plist` — NSLocalNetworkUsageDescription + NSBonjourServices for macOS multicast
+- `src/xenia/app/emulator_window.cc` — OverrideConfigVar<T> helper, UPnP background thread init, Deactivate on untick
+- `src/xenia/kernel/XLiveAPI.cpp` — UPnP init moved after network discovery, passes LocalIP_str()
+- `src/xenia/kernel/upnp.cc` — Full rewrite: DiscoverUPnPDevice returns string, retry loop, Deactivate(), multicast interface
+- `src/xenia/kernel/upnp.h` — Updated signatures (Initialize takes multicast_if string, DiscoverUPnPDevice returns string), new Deactivate() method
+- `src/xenia/kernel/xam/user_tracker.cc` — Fixed 3 XELOGW missing __func__ args (prevented std::terminate)
+- `src/xenia/kernel/xam/xam_ui.cc` — xeXamDispatchDialogAsync uses factory + CallInUIThread (prevented SIGABRT in ImGui)
 
 ### Files Successfully Ported (80+ files):
 - `src/xenia/kernel/XLiveAPI.cpp/.h` - HTTP REST client ✅
@@ -612,9 +655,12 @@ third_party/miniupnp.lua    - Premake config
 2. 🔲 Runtime test: verify offline mode still works
 3. ✅ Runtime test: HTTPS connectivity to backend verified (dialog shows Connected + IPs)
 4. ✅ Port UI components (NetplayConfigDialog with Network menu, config persistence, retry mechanism)
-5. 🔲 Comprehensive netplay testing (session create/browse/join with actual game)
-6. 🔲 Test Systemlink mode (LAN-only, no backend server)
-7. 🔲 Verify friends list and presence features end-to-end
+5. ✅ UPnP port forwarding verified end-to-end (MikroTik router, macOS Local Network permission handled)
+6. ✅ Config persistence verified (settings survive app restart via OverrideConfigVar + SaveConfig)
+7. ✅ Runtime crashes fixed (SigninUI threading, fmt args, assert_always removal)
+8. 🔲 Comprehensive netplay testing (session create/browse/join with actual game)
+9. 🔲 Test Systemlink mode (LAN-only, no backend server)
+10. 🔲 Verify friends list and presence features end-to-end
 
 **Backend:** https://xenia-netplay-2a0298c0e3f4.herokuapp.com/
 
@@ -661,5 +707,6 @@ Changes made via the Network menu UI are automatically saved to `xenia-canary.co
 ### macOS-Specific Notes
 - TLS uses OpenSSL 3 (bundled in the .app — requires `brew install openssl@3`)
 - Network interface discovery uses `getifaddrs()` — set `--network_guid=en0` for Wi-Fi
-- UPnP port forwarding works via miniupnpc (cross-platform)
+- UPnP port forwarding works via miniupnpc — multicast interface is auto-bound to the selected network interface; macOS Local Network permission is handled via Info.plist entries and a 3-attempt retry loop
 - Discord rich presence is not available on macOS
+- XAM dialog creation is deferred to UI thread via `CallInUIThread()` to avoid ImGui threading crashes
