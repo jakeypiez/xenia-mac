@@ -30,5 +30,11 @@
 	<true/>
 	<key>LSSupportsGameMode</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Xenia uses the local network for UPnP port forwarding and multiplayer connectivity.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_ssdp._udp.</string>
+	</array>
 </dict>
 </plist>

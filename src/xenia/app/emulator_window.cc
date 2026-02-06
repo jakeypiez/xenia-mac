@@ -21,6 +21,7 @@
 #include "xenia/base/profiling.h"
 #include "xenia/base/system.h"
 #include "xenia/base/threading.h"
+#include <thread>
 #include "xenia/cpu/processor.h"
 #include "xenia/emulator.h"
 #include "xenia/gpu/command_processor.h"
@@ -61,6 +62,19 @@ DECLARE_bool(logging);
 DECLARE_bool(log_mask_ips);
 DECLARE_bool(upnp);
 DECLARE_bool(xstorage_backend);
+
+namespace {
+template <typename T>
+void OverrideConfigVar(const std::string& name, T value) {
+  if (cvar::ConfigVars) {
+    auto it = cvar::ConfigVars->find(name);
+    if (it != cvar::ConfigVars->end()) {
+      auto* cv = dynamic_cast<cvar::ConfigVar<T>*>(it->second);
+      if (cv) cv->OverrideConfigValue(value);
+    }
+  }
+}
+}  // namespace
 
 DEFINE_bool(fullscreen, false, "Whether to launch the emulator in fullscreen.",
             "Display");
@@ -1810,12 +1824,18 @@ void EmulatorWindow::NetplayConfigDialog::OnDraw(ImGuiIO& io) {
   {
     if (is_online_mode) {
       if (ImGui::Checkbox("UPnP Port Forwarding", &upnp_enabled_)) {
-        cvars::upnp = upnp_enabled_;
+        OverrideConfigVar<bool>("upnp", upnp_enabled_);
         config_changed = true;
 
-        // Initialize UPnP handler immediately when enabled
+        // Initialize UPnP handler on a background thread to avoid
+        // blocking the UI (upnpDiscover is a blocking network call).
         if (upnp_enabled_ && kernel::XLiveAPI::upnp_handler) {
-          kernel::XLiveAPI::upnp_handler->Initialize();
+          std::string local_ip = kernel::XLiveAPI::LocalIP_str();
+          std::thread([local_ip]() {
+            kernel::XLiveAPI::upnp_handler->Initialize(local_ip);
+          }).detach();
+        } else if (!upnp_enabled_ && kernel::XLiveAPI::upnp_handler) {
+          kernel::XLiveAPI::upnp_handler->Deactivate();
         }
       }
       ImGui::SameLine();
@@ -1827,18 +1847,18 @@ void EmulatorWindow::NetplayConfigDialog::OnDraw(ImGuiIO& io) {
       }
 
       if (ImGui::Checkbox("XStorage Backend", &xstorage_enabled_)) {
-        cvars::xstorage_backend = xstorage_enabled_;
+        OverrideConfigVar<bool>("xstorage_backend", xstorage_enabled_);
         config_changed = true;
       }
     }
 
     if (ImGui::Checkbox("Network Logging", &logging_enabled_)) {
-      cvars::logging = logging_enabled_;
+      OverrideConfigVar<bool>("logging", logging_enabled_);
       config_changed = true;
     }
     if (logging_enabled_) {
       if (ImGui::Checkbox("Mask IPs in Logs", &mask_ips_)) {
-        cvars::log_mask_ips = mask_ips_;
+        OverrideConfigVar<bool>("log_mask_ips", mask_ips_);
         config_changed = true;
       }
     }

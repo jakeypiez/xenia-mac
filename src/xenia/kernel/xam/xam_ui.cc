@@ -185,26 +185,37 @@ X_RESULT xeXamDispatchHeadlessEx(
 }
 
 template <typename T>
-X_RESULT xeXamDispatchDialogAsync(T* dialog,
-                                  std::function<void(T*)> close_callback) {
+X_RESULT xeXamDispatchDialogAsync(
+    std::function<T*()> create_dialog,
+    std::function<void(T*)> close_callback) {
   kernel_state()->BroadcastNotification(kXNotificationSystemUI, true);
   kernel_state()->xam_state()->xam_dialogs_shown_++;
-  // Important to pass captured vars by value here since we return from this
-  // without waiting for the dialog to close so the original local vars will be
-  // destroyed.
-  dialog->set_close_callback([dialog, close_callback]() {
-    close_callback(dialog);
+  // Create the dialog on the UI thread to avoid racing with the ImGui draw
+  // loop. The ImGuiDialog constructor calls AddDialog(this) which modifies
+  // the drawer's dialog list — this must happen on the same thread that
+  // iterates that list.
+  auto display_window = kernel_state()->emulator()->display_window();
+  display_window->app_context().CallInUIThread(
+      [create_dialog, close_callback]() {
+        T* dialog = create_dialog();
+        // Important to pass captured vars by value here since we return from
+        // this without waiting for the dialog to close so the original local
+        // vars will be destroyed.
+        dialog->set_close_callback([dialog, close_callback]() {
+          close_callback(dialog);
 
-    kernel_state()->xam_state()->xam_dialogs_shown_--;
+          kernel_state()->xam_state()->xam_dialogs_shown_--;
 
-    auto run = []() -> void {
-      xe::threading::Sleep(std::chrono::milliseconds(100));
-      kernel_state()->BroadcastNotification(kXNotificationSystemUI, false);
-    };
+          auto run = []() -> void {
+            xe::threading::Sleep(std::chrono::milliseconds(100));
+            kernel_state()->BroadcastNotification(kXNotificationSystemUI,
+                                                  false);
+          };
 
-    std::thread thread(run);
-    thread.detach();
-  });
+          std::thread thread(run);
+          thread.detach();
+        });
+      });
 
   return X_ERROR_SUCCESS;
 }
@@ -743,7 +754,10 @@ dword_result_t XamShowMarketplaceUIEx_entry(dword_t user_index, dword_t ui_type,
   const Emulator* emulator = kernel_state()->emulator();
   xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
   return xeXamDispatchDialogAsync<MessageBoxDialog>(
-      new MessageBoxDialog(imgui_drawer, title, desc, buttons, 0), close);
+      [imgui_drawer, title, desc, buttons]() mutable {
+        return new MessageBoxDialog(imgui_drawer, title, desc, buttons, 0);
+      },
+      close);
 }
 DECLARE_XAM_EXPORT1(XamShowMarketplaceUIEx, kUI, kSketchy);
 
@@ -923,10 +937,13 @@ X_RESULT xeXamShowSigninUI(uint32_t user_index, uint32_t users_needed,
 
   const Emulator* emulator = kernel_state()->emulator();
   xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
+  auto* profile_manager = kernel_state()->xam_state()->profile_manager();
+  uint32_t last_used_slot = emulator->input_system()->GetLastUsedSlot();
   return xeXamDispatchDialogAsync<ui::SigninUI>(
-      new ui::SigninUI(
-          imgui_drawer, kernel_state()->xam_state()->profile_manager(),
-          emulator->input_system()->GetLastUsedSlot(), users_needed),
+      [imgui_drawer, profile_manager, last_used_slot, users_needed]() {
+        return new ui::SigninUI(imgui_drawer, profile_manager, last_used_slot,
+                                users_needed);
+      },
       close);
 }
 
@@ -942,7 +959,10 @@ X_RESULT xeXamShowCreateProfileUIEx(uint32_t user_index, dword_t flag,
   auto close = [](ui::CreateProfileUI* dialog) -> void {};
 
   return xeXamDispatchDialogAsync<ui::CreateProfileUI>(
-      new ui::CreateProfileUI(imgui_drawer, emulator), close);
+      [imgui_drawer, emulator]() {
+        return new ui::CreateProfileUI(imgui_drawer, emulator);
+      },
+      close);
 }
 
 dword_result_t XamShowSigninUI_entry(dword_t users_needed, dword_t flags) {
@@ -1012,9 +1032,12 @@ dword_result_t XamShowAchievementsUI_entry(dword_t user_index,
       kernel_state()->emulator()->imgui_drawer();
 
   auto close = [](ui::GameAchievementsUI* dialog) -> void {};
+  auto info_copy = info.value();
   return xeXamDispatchDialogAsync<ui::GameAchievementsUI>(
-      new ui::GameAchievementsUI(imgui_drawer, ImVec2(100.f, 100.f),
-                                 &info.value(), user),
+      [imgui_drawer, info_copy, user]() {
+        return new ui::GameAchievementsUI(imgui_drawer, ImVec2(100.f, 100.f),
+                                          &info_copy, user);
+      },
       close);
 }
 DECLARE_XAM_EXPORT1(XamShowAchievementsUI, kUserProfiles, kStub);
@@ -1029,9 +1052,13 @@ dword_result_t XamShowGamerCardUI_entry(dword_t user_index) {
       kernel_state()->emulator()->imgui_drawer();
 
   auto close = [](ui::GamercardUI* dialog) -> void {};
+  auto* display_window = kernel_state()->emulator()->display_window();
+  auto* ks = kernel_state();
+  auto xuid = user->xuid();
   return xeXamDispatchDialogAsync<ui::GamercardUI>(
-      new ui::GamercardUI(kernel_state()->emulator()->display_window(),
-                          imgui_drawer, kernel_state(), user->xuid()),
+      [display_window, imgui_drawer, ks, xuid]() {
+        return new ui::GamercardUI(display_window, imgui_drawer, ks, xuid);
+      },
       close);
 }
 DECLARE_XAM_EXPORT1(XamShowGamerCardUI, kUserProfiles, kImplemented);
@@ -1046,9 +1073,13 @@ dword_result_t XamShowEditProfileUI_entry(dword_t user_index) {
       kernel_state()->emulator()->imgui_drawer();
 
   auto close = [](ui::GamercardUI* dialog) -> void {};
+  auto* display_window = kernel_state()->emulator()->display_window();
+  auto* ks = kernel_state();
+  auto xuid = user->xuid();
   return xeXamDispatchDialogAsync<ui::GamercardUI>(
-      new ui::GamercardUI(kernel_state()->emulator()->display_window(),
-                          imgui_drawer, kernel_state(), user->xuid()),
+      [display_window, imgui_drawer, ks, xuid]() {
+        return new ui::GamercardUI(display_window, imgui_drawer, ks, xuid);
+      },
       close);
 }
 DECLARE_XAM_EXPORT1(XamShowEditProfileUI, kUserProfiles, kImplemented);

@@ -373,12 +373,12 @@ void XLiveAPI::Init() {
     return;
   }
 
-  if (cvars::upnp) {
-    upnp_handler->Initialize();
-  }
-
   DiscoverNetworkInterfaces();
   SelectNetworkInterface();
+
+  if (cvars::upnp) {
+    upnp_handler->Initialize(LocalIP_str());
+  }
 
   online_ip_ = Getwhoami();
 

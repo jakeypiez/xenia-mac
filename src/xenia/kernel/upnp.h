@@ -22,9 +22,10 @@ class UPnP {
   UPnP();
   ~UPnP();
 
-  void Initialize();
+  void Initialize(const std::string& multicast_if = "");
+  void Deactivate();
 
-  void SearchUPnP();
+  bool SearchUPnP();
 
   bool is_active() const { return active_; }
 
@@ -71,7 +72,7 @@ class UPnP {
   void RefreshPortsTimer();
 
   bool LoadSavedUPnPDevice();
-  const UPNPDev* DiscoverUPnPDevice();
+  std::string DiscoverUPnPDevice();
   const UPNPDev* GetDeviceByName(const UPNPDev* device_list,
                                  std::string device_name);
   bool GetAndParseUPnPXmlData(std::string url);
@@ -80,6 +81,8 @@ class UPnP {
   std::atomic<bool> active_ = false;
   std::atomic<bool> leases_supported_ = true;
   std::atomic<bool> refreshed_unauthorized_ = false;
+
+  std::string multicast_interface_;
 
   IGDdatas* igd_data_ = new IGDdatas();
   UPNPUrls* igd_urls_ = new UPNPUrls();

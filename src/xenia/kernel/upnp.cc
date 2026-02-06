@@ -12,6 +12,9 @@
 #include "xenia/base/cvar.h"
 #include "xenia/base/logging.h"
 
+#include <chrono>
+#include <thread>
+
 #include "third_party/miniupnp/miniupnpc/include/miniwget.h"
 #include "third_party/miniupnp/miniupnpc/include/upnpcommands.h"
 
@@ -101,64 +104,115 @@ const UPNPDev* UPnP::GetDeviceByName(const UPNPDev* device_list,
   return device;
 }
 
-const UPNPDev* UPnP::DiscoverUPnPDevice() {
+std::string UPnP::DiscoverUPnPDevice() {
   XELOGI("UPnP: Starting UPnP search");
 
+  const char* mcast_if = multicast_interface_.empty()
+                             ? nullptr
+                             : multicast_interface_.c_str();
+  if (mcast_if) {
+    XELOGI("UPnP: Using multicast interface: {}", mcast_if);
+  }
+
+  // Pass "" for minissdpdsock to skip minissdpd (not available on macOS)
   int error = 0;
-  UPNPDev* device_list = upnpDiscover(2000, nullptr, nullptr, 0, 0, 2, &error);
+  UPNPDev* device_list = upnpDiscover(5000, mcast_if, "", 0, 0, 2, &error);
   if (error) {
-    XELOGE("UPnP: SearchUPnPDevice Error Code: {}", error);
-    return nullptr;
+    XELOGE("UPnP: upnpDiscover error code: {}", error);
+    return "";
   }
 
   if (!device_list) {
-    XELOGE("UPnP: No UPnP devices were found");
-    return nullptr;
+    XELOGE("UPnP: No UPnP devices responded (timeout)");
+    return "";
+  }
+
+  // Log all discovered devices for debugging
+  for (const UPNPDev* d = device_list; d; d = d->pNext) {
+    XELOGI("UPnP: Discovered device: {} at {}", d->st, d->descURL);
   }
 
   const UPNPDev* device = GetDeviceByName(device_list, "InternetGatewayDevice");
+  std::string descURL = device ? std::string(device->descURL) : "";
   freeUPNPDevlist(device_list);
-  return device;
+
+  if (descURL.empty()) {
+    XELOGE("UPnP: No InternetGatewayDevice found in device list");
+  }
+
+  return descURL;
 }
 
-void UPnP::Initialize() {
+void UPnP::Initialize(const std::string& multicast_if) {
   std::lock_guard lock(mutex_);
+
+  multicast_interface_ = multicast_if;
 
   if (LoadSavedUPnPDevice()) {
     return;
   }
 
-  SearchUPnP();
+  // Retry up to 3 times — the first attempt may fail on macOS while the
+  // Local Network permission dialog is showing (sendto returns EHOSTUNREACH
+  // until the user clicks Allow).
+  for (int attempt = 1; attempt <= 3; ++attempt) {
+    if (SearchUPnP()) {
+      RefreshPortsTimer();
+      active_ = true;
+      XELOGI("UPnP: Initialized successfully, ready for port mapping");
 
-  RefreshPortsTimer();
-  active_ = true;
+      // Re-add any existing port bindings (e.g. after router UPnP reset)
+      if (!port_bindings_.empty()) {
+        XELOGI("UPnP: Re-adding {} existing port binding(s)",
+               port_bindings_.size());
+        RefreshPorts(multicast_interface_);
+      }
+      return;
+    }
+    if (attempt < 3) {
+      XELOGI("UPnP: Attempt {}/3 failed, retrying in 3 seconds...", attempt);
+      std::this_thread::sleep_for(std::chrono::seconds(3));
+    }
+  }
+  XELOGE("UPnP: Initialization failed after 3 attempts, port mapping disabled");
 };
 
-void UPnP::SearchUPnP() {
+void UPnP::Deactivate() {
+  std::lock_guard lock(mutex_);
+  active_ = false;
+  // Clear saved device so next Initialize does a fresh discovery
+  cvars::upnp_root = "";
+  OVERRIDE_string(upnp_root, cvars::upnp_root);
+  XELOGI("UPnP: Deactivated");
+}
+
+bool UPnP::SearchUPnP() {
   if (active_) {
     std::lock_guard lock(mutex_);
   }
 
-  const UPNPDev* device = DiscoverUPnPDevice();
-  if (!device) {
+  std::string descURL = DiscoverUPnPDevice();
+  if (descURL.empty()) {
     XELOGE("No UPNP device was found");
-    return;
+    return false;
   }
 
-  if (!GetAndParseUPnPXmlData(device->descURL)) {
-    XELOGE("Failed to retrieve UPNP xml for {}", device->descURL);
-    return;
+  if (!GetAndParseUPnPXmlData(descURL)) {
+    XELOGE("Failed to retrieve UPNP xml for {}", descURL);
+    return false;
   }
 
-  XELOGI("Found UPnP device type : {} at {}", device->st, device->descURL);
+  XELOGI("Found UPnP device at {}", descURL);
 
-  cvars::upnp_root = device->descURL;
+  cvars::upnp_root = descURL;
   OVERRIDE_string(upnp_root, cvars::upnp_root);
+  return true;
 };
 
 uint32_t UPnP::AddPort(std::string_view addr, uint16_t internal_port,
                        std::string_view protocol) {
   if (!active_) {
+    XELOGW("UPnP: AddPort called but UPnP is not active (no gateway found)");
     return UPNPCOMMAND_UNKNOWN_ERROR;
   }
 
