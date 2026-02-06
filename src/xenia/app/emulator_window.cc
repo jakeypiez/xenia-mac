@@ -179,7 +179,7 @@ using namespace xe::hid;
 using namespace xe::gpu;
 
 constexpr std::string_view kRecentlyPlayedTitlesFilename = "recent.toml";
-constexpr std::string_view kBaseTitle = "Xenia-Mac-Netplay";
+constexpr std::string_view kBaseTitle = "Xenia";
 
 EmulatorWindow::EmulatorWindow(Emulator* emulator,
                                ui::WindowedAppContext& app_context,
@@ -204,7 +204,7 @@ EmulatorWindow::EmulatorWindow(Emulator* emulator,
 #ifdef XE_BUILD_IS_PR
                 "PR#" XE_BUILD_PR_NUMBER " - "
 #endif
-                "Xenia" "@" XE_BUILD_COMMIT_SHORT " on " XE_BUILD_DATE
+                XE_BUILD_COMMIT_SHORT " on " XE_BUILD_DATE
                 ")";
 
   LoadRecentlyLaunchedTitles();
