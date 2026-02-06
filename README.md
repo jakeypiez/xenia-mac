@@ -13,8 +13,6 @@ A macOS fork of [Xenia Canary](https://github.com/xenia-canary/xenia-canary) wit
 - **macOS native** — Metal GPU backend, Apple Silicon (ARM64) and Intel (x86_64)
 - **Xbox Live netplay** — Online multiplayer via [Xenia-WebServices](https://github.com/AdrianCassar/Xenia-WebServices) backend
 - **Systemlink** — LAN multiplayer without a backend server
-- **UPnP port forwarding** — Automatic port mapping with macOS Local Network permission handling
-- **Network config UI** — In-app Network menu for server selection, connection status, and settings
 
 ## Requirements
 
