@@ -51,20 +51,20 @@ jobs:
 
       - name: Create DMG
         run: |
-          APP_PATH="build/bin/Mac-ARM64/Release/Xenia-Mac-Netplay.app"
-          DMG_PATH="Xenia-Mac-Netplay-macOS-ARM64.dmg"
+          APP_PATH="build/bin/Mac-ARM64/Release/Xenia.app"
+          DMG_PATH="Xenia-macOS-ARM64.dmg"
           STAGING_DIR=$(mktemp -d)
           cp -R "$APP_PATH" "$STAGING_DIR/"
           ln -s /Applications "$STAGING_DIR/Applications"
-          hdiutil create -volname "Xenia-Mac-Netplay" \
+          hdiutil create -volname "Xenia" \
             -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
           rm -rf "$STAGING_DIR"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Xenia-Mac-Netplay-macOS-ARM64
-          path: Xenia-Mac-Netplay-macOS-ARM64.dmg
+          name: Xenia-macOS-ARM64
+          path: Xenia-macOS-ARM64.dmg
 
   release:
     name: Create GitHub Release
@@ -75,7 +75,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: Xenia-Mac-Netplay-macOS-ARM64
+          name: Xenia-macOS-ARM64
 
       - name: Determine tag
         id: tag
@@ -90,9 +90,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: Xenia-Mac-Netplay ${{ steps.tag.outputs.tag }}
+          name: Xenia ${{ steps.tag.outputs.tag }}
           body: |
-            ## Xenia-Mac-Netplay ${{ steps.tag.outputs.tag }}
+            ## Xenia ${{ steps.tag.outputs.tag }}
 
             Xbox 360 emulator for macOS with netplay support.
 
@@ -102,8 +102,8 @@ jobs:
 
             ### Install
             1. Download the `.dmg` file below
-            2. Open the DMG and drag **Xenia-Mac-Netplay** to Applications
+            2. Open the DMG and drag **Xenia** to Applications
             3. Right-click the app → Open (first launch only, to bypass Gatekeeper)
-          files: Xenia-Mac-Netplay-macOS-ARM64.dmg
+          files: Xenia-macOS-ARM64.dmg
           draft: false
           prerelease: false
