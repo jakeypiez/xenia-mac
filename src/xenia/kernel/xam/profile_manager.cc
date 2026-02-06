@@ -552,7 +552,7 @@ bool ProfileManager::CreateAccount(const uint64_t xuid,
   std::u16string gamertag_u16 = xe::to_utf16(gamertag);
 
   string_util::copy_truncating(account.gamertag, gamertag_u16,
-                               sizeof(account.gamertag));
+                               std::size(account.gamertag));
 
   const bool live_enabled =
       reserved_flags & X_XAMACCOUNTINFO::AccountReservedFlags::kLiveEnabled;

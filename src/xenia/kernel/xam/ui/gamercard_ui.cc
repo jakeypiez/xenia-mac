@@ -611,30 +611,51 @@ void GamercardUI::OnDraw(ImGuiIO& io) {
 }
 
 void GamercardUI::SaveAccountData() {
-  const auto account_original =
-      *kernel_state()->xam_state()->profile_manager()->GetAccount(xuid_);
+  auto profile_manager =
+      kernel_state()->xam_state()->profile_manager();
+
+  const auto account_original = *profile_manager->GetAccount(xuid_);
   auto account = account_original;
 
   account.SetCountry(gamercardValues_.country);
   account.SetLanguage(gamercardValues_.language);
   account.SetSubscriptionTier(gamercardValues_.account_subscription_tier);
-  account.ToggleLiveFlag(gamercardValues_.is_live_enabled);
 
   const std::u16string gamertag =
       xe::to_utf16(std::string(gamercardValues_.gamertag));
-  string_util::copy_and_swap_truncating(account.gamertag, gamertag,
-                                        std::size(account.gamertag));
+  // Use copy_truncating (NOT copy_and_swap_truncating) — the account struct
+  // stores the gamertag in host byte order, not big-endian guest order.
+  string_util::copy_truncating(account.gamertag, gamertag,
+                               std::size(account.gamertag));
+
+  // Handle Live flag changes via the proper Convert functions which
+  // generate xuid_online and re-login the profile to refresh UserProfile.
+  const bool live_changed =
+      gamercardValues_.is_live_enabled != gamercardOriginalValues_.is_live_enabled;
+
+  // Apply Live flag to account for the non-Live-flag field save below.
+  account.ToggleLiveFlag(gamercardValues_.is_live_enabled);
 
   if (std::memcmp(&account, &account_original, sizeof(X_XAMACCOUNTINFO)) != 0) {
     if (!is_signed_in_) {
-      kernel_state()->xam_state()->profile_manager()->MountProfile(xuid_);
+      profile_manager->MountProfile(xuid_);
     }
 
-    kernel_state()->xam_state()->profile_manager()->UpdateAccount(xuid_,
-                                                                  &account);
+    profile_manager->UpdateAccount(xuid_, &account);
 
     if (!is_signed_in_) {
-      kernel_state()->xam_state()->profile_manager()->DismountProfile(xuid_);
+      profile_manager->DismountProfile(xuid_);
+    }
+  }
+
+  // Use ConvertToXboxLiveEnabledProfile / ConvertToOfflineProfile for Live
+  // flag changes — these properly generate xuid_online, logout/login the
+  // profile to refresh the in-memory UserProfile, and update the account.
+  if (live_changed) {
+    if (gamercardValues_.is_live_enabled) {
+      profile_manager->ConvertToXboxLiveEnabledProfile(xuid_);
+    } else {
+      profile_manager->ConvertToOfflineProfile(xuid_);
     }
   }
 }

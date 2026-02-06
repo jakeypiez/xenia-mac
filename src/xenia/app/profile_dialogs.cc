@@ -231,6 +231,16 @@ void ProfileConfigDialog::OnDraw(ImGuiIO& io) {
               emulator_window_->emulator()->kernel_state(), xuid);
         }
 
+        if (account.IsLiveEnabled()) {
+          if (ImGui::MenuItem("Disable Xbox Live")) {
+            profile_manager->ConvertToOfflineProfile(xuid);
+          }
+        } else {
+          if (ImGui::MenuItem("Enable Xbox Live")) {
+            profile_manager->ConvertToXboxLiveEnabledProfile(xuid);
+          }
+        }
+
         const bool is_signedin = profile_manager->GetProfile(xuid) != nullptr;
         ImGui::BeginDisabled(!is_signedin);
         if (ImGui::MenuItem("Show Played Titles")) {
