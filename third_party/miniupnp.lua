@@ -23,6 +23,15 @@ project("miniupnp")
     defines({
       "MACOSX",
     })
+    prebuildcommands({
+      'cd "$(SRCROOT)/../third_party/miniupnp/miniupnpc" && ' ..
+      'if [ ! -f miniupnpcstrings.h ]; then ' ..
+        'OS_VER=$(uname -s)/$(uname -r) && ' ..
+        'UPNP_VER=$(cat VERSION) && ' ..
+        'sed -e "s|OS/version|${OS_VER}|" -e "s|\\\"version\\\"|\\\"${UPNP_VER}\\\"|" ' ..
+        'miniupnpcstrings.h.in > miniupnpcstrings.h; ' ..
+      'fi',
+    })
 
   filter("platforms:Linux")
     prebuildcommands({

@@ -28,6 +28,15 @@ jobs:
         run: |
           brew install sdl2 lz4 openssl@3 python@3.12
 
+      - name: Generate miniupnpcstrings.h
+        run: |
+          cd third_party/miniupnp/miniupnpc
+          OS_VER="$(uname -s)/$(uname -r)"
+          UPNP_VER="$(cat VERSION)"
+          sed -e "s|OS/version|${OS_VER}|" \
+              -e "s|\"version\"|\"${UPNP_VER}\"|" \
+              miniupnpcstrings.h.in > miniupnpcstrings.h
+
       - name: Setup and build
         run: |
           python3.12 xenia-build.py setup
