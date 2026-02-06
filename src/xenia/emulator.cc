@@ -1542,20 +1542,16 @@ X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
       // Show achievments data
       tabulate::Table table;
       table.format().multi_byte_characters(true);
-      table.add_row({"ID", "Title", "Description", "Type", "Gamerscore"});
+      table.add_row({"ID", "Title", "Description", "Gamerscore"});
 
       const std::vector<kernel::util::GameInfoDatabase::Achievement>
           achievement_list = game_info_database_->GetAchievements();
       for (const kernel::util::GameInfoDatabase::Achievement& entry :
            achievement_list) {
-        const std::string type = GetAchievementTypeName(
-            kernel::xam::GetAchievementType(entry.flags));
-
         table.add_row({fmt::format("{}", entry.id), entry.label,
-                       entry.description, type,
-                       fmt::format("{}", entry.gamerscore)});
+                       entry.description, fmt::format("{}", entry.gamerscore)});
       }
-      XELOGI("\n-------------------- ACHIEVEMENTS --------------------\n{}",
+      XELOGI("-------------------- ACHIEVEMENTS --------------------\n{}",
              table.str());
 
       const std::vector<kernel::util::GameInfoDatabase::Property>
@@ -1563,18 +1559,16 @@ X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
 
       table = tabulate::Table();
       table.format().multi_byte_characters(true);
-      table.add_row({"ID", "Name", "Matchmaking", "Data Size"});
+      table.add_row({"ID", "Name", "Data Size"});
 
       for (const kernel::util::GameInfoDatabase::Property& entry :
            properties_list) {
         std::string label =
             string_util::remove_eol(string_util::trim(entry.description));
-
         table.add_row({fmt::format("{:08X}", entry.id), label,
-                       entry.is_matchmaking ? "True" : "False",
                        fmt::format("{}", entry.data_size)});
       }
-      XELOGI("\n-------------------- PROPERTIES --------------------\n{}",
+      XELOGI("-------------------- PROPERTIES --------------------\n{}",
              table.str());
 
       const std::vector<kernel::util::GameInfoDatabase::Context> contexts_list =
@@ -1582,73 +1576,17 @@ X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
 
       table = tabulate::Table();
       table.format().multi_byte_characters(true);
-      table.add_row(
-          {"ID", "Name", "Matchmaking", "Default Value", "Max Value"});
+      table.add_row({"ID", "Name", "Default Value", "Max Value"});
 
       for (const kernel::util::GameInfoDatabase::Context& entry :
            contexts_list) {
         std::string label =
             string_util::remove_eol(string_util::trim(entry.description));
-
         table.add_row({fmt::format("{:08X}", entry.id), label,
-                       entry.is_matchmaking ? "True" : "False",
                        fmt::format("{}", entry.default_value),
                        fmt::format("{}", entry.max_value)});
       }
-      XELOGI("\n-------------------- CONTEXTS --------------------\n{}",
-             table.str());
-
-      const std::vector<kernel::util::GameInfoDatabase::StatsView> stats_views =
-          game_info_database_->GetStatsViews();
-
-      // 4D5307EA SPA contains a lot of stats, limit views to log.
-      const auto stats_views_limit = stats_views | std::views::take(100);
-
-      table = tabulate::Table();
-      table.format().multi_byte_characters(true);
-      table.add_row({"ID", "View Type", "Name", "Skilled", "Arbitrated",
-                     "Hidden", "Team View", "Online Only"});
-
-      for (const kernel::util::GameInfoDatabase::StatsView& entry :
-           stats_views_limit) {
-        const std::string name =
-            string_util::remove_eol(string_util::trim(entry.view.name));
-
-        const std::string view_type =
-            kernel::xam::GetViewTypeName(entry.view.view_type);
-
-        table.add_row({fmt::format("{:08X}", entry.view.id), view_type, name,
-                       entry.view.skilled ? "True" : "False",
-                       entry.view.arbitrated ? "True" : "False",
-                       entry.view.hidden ? "True" : "False",
-                       entry.view.team_view ? "True" : "False",
-                       entry.view.online_only ? "True" : "False"});
-      }
-
-      std::string totals;
-
-      if (stats_views.size() > stats_views_limit.size()) {
-        totals = fmt::format("\nViews: {}/{}", stats_views_limit.size(),
-                             stats_views.size());
-      }
-      XELOGI("\n-------------------- Stats Views --------------------{}\n{}",
-             totals.c_str(), table.str());
-
-      const std::vector<kernel::util::GameInfoDatabase::PresenceMode>
-          presence_modes = game_info_database_->GetPresenceModes();
-
-      table = tabulate::Table();
-      table.format().multi_byte_characters(true);
-      table.add_row({"Context Value", "Contexts Count", "Properties Count"});
-
-      for (const kernel::util::GameInfoDatabase::PresenceMode& entry :
-           presence_modes) {
-        table.add_row(
-            {fmt::format("{}", entry.context_value),
-             fmt::format("{}", entry.property_bag.contexts.size()),
-             fmt::format("{}", entry.property_bag.properties.size())});
-      }
-      XELOGI("\n-------------------- PRESENCE MODES --------------------\n{}",
+      XELOGI("-------------------- CONTEXTS --------------------\n{}",
              table.str());
 
       auto icon_block = game_info_database_->GetIcon();

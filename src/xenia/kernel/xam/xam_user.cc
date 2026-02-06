@@ -96,7 +96,7 @@ dword_result_t XamUserGetSigninState_entry(dword_t user_index) {
   if (kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
     const auto& user_profile =
         kernel_state()->xam_state()->GetUserProfile(user_index);
-    signin_state = user_profile->signin_state();
+    signin_state = static_cast<uint32_t>(user_profile->signin_state());
   }
   return signin_state;
 }
@@ -129,7 +129,7 @@ X_HRESULT_result_t XamUserGetSigninInfo_entry(
     info->xuid = user_profile->xuid();
   }
 
-  info->signin_state = user_profile->signin_state();
+  info->signin_state = static_cast<uint32_t>(user_profile->signin_state());
   return X_E_SUCCESS;
 }
 DECLARE_XAM_EXPORT1(XamUserGetSigninInfo, kUserProfiles, kImplemented);
@@ -518,7 +518,7 @@ dword_result_t XamUserAreUsersFriends_entry(
           kernel_state()->xam_state()->GetUserProfile(user_index);
 
       // Check if we are signed into live
-      if (user_profile->signin_state() != 2) {
+      if (user_profile->signin_state() != X_USER_SIGNIN_STATE::SignedInToLive) {
         result = X_ERROR_NOT_LOGGED_ON;
       } else {
         // No friends!

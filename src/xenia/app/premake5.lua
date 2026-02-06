@@ -55,6 +55,13 @@ project("xenia-app")
   defines({
     "XBYAK_NO_OP_NAMES",
     "XBYAK_ENABLE_OMITTED_OPERAND",
+    "CURL_STATICLIB",
+    "MINIUPNP_STATICLIB",
+  })
+  includedirs({
+    project_root.."/third_party/libcurl/include",
+    project_root.."/third_party/miniupnp/miniupnpc/include",
+    project_root.."/third_party/rapidjson/include",
   })
   local_platform_files()
   sdl2_include()
@@ -238,12 +245,18 @@ project("xenia-app")
       "MetalFX.framework",
       "MetalKit.framework",
       "QuartzCore.framework",
+      "Security.framework",
+      "SystemConfiguration.framework",
+      "ssl",
+      "crypto",
+      "z",
     })
     libdirs({
       metal_converter_libdir,
       dxilconv_libdir,
       sdl2_libdir,
       lz4_libdir,
+      "/usr/local/opt/openssl@3/lib",
     })
     linkoptions({
       path.join(dxilconv_libdir, "libdxilconv.dylib"),
@@ -271,10 +284,27 @@ project("xenia-app")
           app_frameworks .. '/"',
       'cp -f "' .. path.join(sdl2_libdir, "libSDL2-2.0.0.dylib") .. '" "' ..
           app_frameworks .. '/"',
+      -- Bundle OpenSSL dylibs
+      'for d in /opt/homebrew/opt/openssl@3/lib /usr/local/opt/openssl@3/lib; do '
+          .. 'if [ -f "$d/libssl.3.dylib" ]; then '
+          .. 'cp -f "$d/libssl.3.dylib" "' .. app_frameworks .. '/"; '
+          .. 'cp -f "$d/libcrypto.3.dylib" "' .. app_frameworks .. '/"; '
+          .. 'break; fi; done',
       'install_name_tool -id @rpath/liblz4.1.dylib "' .. app_frameworks ..
           '/liblz4.1.dylib"',
       'install_name_tool -id @rpath/libSDL2-2.0.0.dylib "' .. app_frameworks ..
           '/libSDL2-2.0.0.dylib"',
+      'install_name_tool -id @rpath/libssl.3.dylib "' .. app_frameworks ..
+          '/libssl.3.dylib"',
+      'install_name_tool -id @rpath/libcrypto.3.dylib "' .. app_frameworks ..
+          '/libcrypto.3.dylib"',
+      -- Fix libssl's reference to libcrypto to use @rpath
+      'install_name_tool -change '
+          .. '"/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib" '
+          .. '"@rpath/libcrypto.3.dylib" "' .. app_frameworks .. '/libssl.3.dylib" 2>/dev/null || true',
+      'install_name_tool -change '
+          .. '"/usr/local/opt/openssl@3/lib/libcrypto.3.dylib" '
+          .. '"@rpath/libcrypto.3.dylib" "' .. app_frameworks .. '/libssl.3.dylib" 2>/dev/null || true',
       'if otool -L "' .. app_executable .. '" | grep -q ' ..
           '"/opt/homebrew/opt/lz4/lib/liblz4.1.dylib"; then ' ..
           'install_name_tool -change ' ..
@@ -295,6 +325,27 @@ project("xenia-app")
           'install_name_tool -change ' ..
           '"/usr/local/opt/sdl2/lib/libSDL2-2.0.0.dylib" ' ..
           '"@rpath/libSDL2-2.0.0.dylib" "' .. app_executable .. '"; fi',
+      -- Fix OpenSSL references in executable
+      'if otool -L "' .. app_executable .. '" | grep -q ' ..
+          '"/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib"; then ' ..
+          'install_name_tool -change ' ..
+          '"/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib" ' ..
+          '"@rpath/libssl.3.dylib" "' .. app_executable .. '"; fi',
+      'if otool -L "' .. app_executable .. '" | grep -q ' ..
+          '"/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib"; then ' ..
+          'install_name_tool -change ' ..
+          '"/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib" ' ..
+          '"@rpath/libcrypto.3.dylib" "' .. app_executable .. '"; fi',
+      'if otool -L "' .. app_executable .. '" | grep -q ' ..
+          '"/usr/local/opt/openssl@3/lib/libssl.3.dylib"; then ' ..
+          'install_name_tool -change ' ..
+          '"/usr/local/opt/openssl@3/lib/libssl.3.dylib" ' ..
+          '"@rpath/libssl.3.dylib" "' .. app_executable .. '"; fi',
+      'if otool -L "' .. app_executable .. '" | grep -q ' ..
+          '"/usr/local/opt/openssl@3/lib/libcrypto.3.dylib"; then ' ..
+          'install_name_tool -change ' ..
+          '"/usr/local/opt/openssl@3/lib/libcrypto.3.dylib" ' ..
+          '"@rpath/libcrypto.3.dylib" "' .. app_executable .. '"; fi',
       'codesign --force --sign - "' .. app_frameworks ..
           '/libmetalirconverter.dylib"',
       'codesign --force --sign - "' .. app_frameworks ..
@@ -303,6 +354,10 @@ project("xenia-app")
           '/liblz4.1.dylib"',
       'codesign --force --sign - "' .. app_frameworks ..
           '/libSDL2-2.0.0.dylib"',
+      'codesign --force --sign - "' .. app_frameworks ..
+          '/libssl.3.dylib"',
+      'codesign --force --sign - "' .. app_frameworks ..
+          '/libcrypto.3.dylib"',
       'codesign --force --deep --sign - --entitlements "' ..
           entitlements_path .. '" "' .. app_bundle .. '"',
     })

@@ -60,7 +60,7 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, lpvoid_t buffer_ptr,
     kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
     return X_ERROR_IO_PENDING;
   } else {
-    assert_always();
+    XELOGW("xeXamEnumerate: neither items_returned nor overlapped provided");
     return X_ERROR_INVALID_PARAMETER;
   }
 }

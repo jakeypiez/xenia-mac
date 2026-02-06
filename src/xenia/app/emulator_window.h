@@ -94,6 +94,7 @@ class EmulatorWindow {
 
   void ToggleProfilesConfigDialog();
   void ToggleXMPConfigDialog();
+  void ToggleNetplayConfigDialog();
   void SetHotkeysState(bool enabled) { disable_hotkeys_ = !enabled; }
 
   // Types of button functions for hotkeys.
@@ -229,6 +230,34 @@ class EmulatorWindow {
     float volume_ = 0.0f;
   };
 
+  class NetplayConfigDialog final : public ui::ImGuiDialog {
+   public:
+    NetplayConfigDialog(ui::ImGuiDrawer* imgui_drawer,
+                        EmulatorWindow& emulator_window);
+
+   protected:
+    void OnDraw(ImGuiIO& io) override;
+
+   private:
+    void RefreshServerList();
+    void RefreshStatus();
+
+    EmulatorWindow& emulator_window_;
+    int network_mode_ = 2;
+    int selected_server_ = 0;
+    std::vector<std::string> server_list_;
+    char custom_server_[256] = {};
+    char friend_xuid_input_[20] = {};
+    std::vector<uint64_t> friends_list_;
+    bool upnp_enabled_ = false;
+    bool xstorage_enabled_ = true;
+    bool logging_enabled_ = false;
+    bool mask_ips_ = true;
+    std::string status_text_ = "Not initialized";
+    std::string local_ip_text_;
+    std::string online_ip_text_;
+  };
+
   explicit EmulatorWindow(Emulator* emulator,
                           ui::WindowedAppContext& app_context, uint32_t width,
                           uint32_t height);
@@ -317,6 +346,7 @@ class EmulatorWindow {
   std::unique_ptr<ProfileConfigDialog> profile_config_dialog_;
 
   std::unique_ptr<XMPConfigDialog> xmp_config_dialog_;
+  std::unique_ptr<NetplayConfigDialog> netplay_config_dialog_;
 
   std::vector<RecentTitleEntry> recently_launched_titles_;
 };

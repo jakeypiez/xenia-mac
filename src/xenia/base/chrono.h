@@ -88,12 +88,14 @@ struct NtSystemClock {
     return sys_time{cdp.time_since_epoch()};
   }
 
-  // TODO(Gliniak): Disable until WINE will implement tzdb.
-  /*
+  // Note: Simplified implementation that returns system time as local_time
+  // Original used std::chrono::current_zone()->to_local() but was disabled for WINE
   static constexpr std::chrono::local_time<std::chrono::system_clock::duration>
   to_local(const time_point& tp) requires (domain_ == Domain::Host) {
-    return std::chrono::current_zone()->to_local(to_sys(tp));
-  }*/
+    auto sys_tp = to_sys(tp);
+    return std::chrono::local_time<std::chrono::system_clock::duration>{
+        sys_tp.time_since_epoch()};
+  }
 
   static constexpr time_point from_sys(
       const std::chrono::system_clock::time_point& tp)

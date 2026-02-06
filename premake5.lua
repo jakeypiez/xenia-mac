@@ -395,6 +395,8 @@ workspace("xenia")
   include("third_party/zstd.lua")
   include("third_party/zlib-ng.lua")
   include("third_party/pugixml.lua")
+  include("third_party/libcurl.lua")
+  include("third_party/miniupnp.lua")
 
   if os.istarget("windows") then
     include("third_party/libusb.lua")

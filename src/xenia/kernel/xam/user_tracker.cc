@@ -9,6 +9,10 @@
 
 #include "xenia/emulator.h"
 #include "xenia/kernel/xam/user_profile.h"
+#include "xenia/kernel/xnet.h"
+
+#include <ranges>
+#include <sstream>
 
 #include "third_party/fmt/include/fmt/format.h"
 #include "third_party/stb/stb_image.h"
@@ -22,13 +26,15 @@
 
 DECLARE_int32(user_language);
 
+DECLARE_int32(user_country);
+
 namespace xe {
 namespace kernel {
 namespace xam {
 
 bool UserTracker::AddUser(uint64_t xuid) {
   if (IsUserTracked(xuid)) {
-    XELOGW("{}: User is already on tracking list!", __func__);
+    XELOGW("{}: User is already on tracking list!");
     return false;
   }
 
@@ -36,13 +42,15 @@ bool UserTracker::AddUser(uint64_t xuid) {
 
   if (spa_data_) {
     AddTitleToPlayedList(xuid);
+    AddDefaultProperties(xuid);
+    AddDefaultContexts(xuid);
   }
   return true;
 }
 
 bool UserTracker::RemoveUser(uint64_t xuid) {
   if (!IsUserTracked(xuid)) {
-    XELOGW("{}: User is not on tracking list!", __func__);
+    XELOGW("{}: User is not on tracking list!");
     return false;
   }
 
@@ -185,17 +193,342 @@ void UserTracker::AddTitleToPlayedList(uint64_t xuid) {
   UpdateProfileGpd();
 }
 
-void UserTracker::RemoveTitleFromPlayedList(uint64_t xuid, uint32_t title_id) {
+void UserTracker::RemoveTitleFromPlayedList(uint64_t xuid,
+                                            uint32_t title_id) {
   auto user = kernel_state()->xam_state()->GetUserProfile(xuid);
   if (!user) {
     return;
   }
 
-  if (user->dashboard_gpd_.RemoveTitle(title_id)) {
-    UpdateSettingValue(xuid, kDashboardID,
-                       UserSettingId::XPROFILE_GAMERCARD_TITLES_PLAYED, -1);
-    FlushUserData(xuid);
+  auto title_info = user->dashboard_gpd_.GetTitleInfo(title_id);
+  if (!title_info) {
+    return;
   }
+
+  // Only allow removal of titles with no unlocked achievements
+  if (title_info->achievements_unlocked > 0) {
+    return;
+  }
+
+  user->dashboard_gpd_.RemoveTitle(title_id);
+  user->games_gpd_.erase(title_id);
+
+  UpdateSettingValue(xuid, kDashboardID,
+                     UserSettingId::XPROFILE_GAMERCARD_TITLES_PLAYED, -1);
+
+  UpdateProfileGpd();
+  UpdateTitleGpdFile();
+}
+
+void UserTracker::AddDefaultProperties() {
+  if (!spa_data_) {
+    return;
+  }
+
+  for (const uint64_t xuid : tracked_xuids_) {
+    AddDefaultProperties(xuid);
+  }
+}
+
+void UserTracker::AddDefaultProperties(uint64_t xuid) {
+  auto user = kernel_state()->xam_state()->GetUserProfile(xuid);
+  if (!user) {
+    return;
+  }
+
+  const std::u16string gamertag =
+      xe::string_util::read_u16string_and_swap(user->account_info_.gamertag);
+
+  Property PUID =
+      Property(XPROPERTY_GAMER_PUID,
+               static_cast<int64_t>(user->account_info_.xuid_online));
+  Property GAMER_HOST_NAME = Property(XPROPERTY_GAMER_HOSTNAME, gamertag);
+  Property GAMER_NAME = Property(XPROPERTY_GAMERNAME, gamertag);
+  Property GAMER_ZONE = Property(
+      XPROPERTY_GAMER_ZONE,
+      static_cast<int32_t>(X_USER_PROFILE_GAMERCARD_ZONE_OPTIONS::GAMERCARD_ZONE_PRO));
+  Property GAMER_COUNTRY =
+      Property(XPROPERTY_GAMER_COUNTRY, cvars::user_country);
+  Property GAMER_LANGUAGE =
+      Property(XPROPERTY_GAMER_LANGUAGE, cvars::user_language);
+  Property PLATFORM_TYPE = Property(
+      XPROPERTY_PLATFORM_TYPE, static_cast<int32_t>(PLATFORM_TYPE::Xbox360));
+  Property GAMER_MU = Property(XPROPERTY_GAMER_MU, 0.0);
+  Property GAMER_SIGMA = Property(XPROPERTY_GAMER_SIGMA, 0.0);
+
+  AddProperty(xuid, &PUID);  // Required - 58410AC2 sets this manually
+  AddProperty(xuid, &GAMER_HOST_NAME);  // Required
+  AddProperty(xuid, &GAMER_NAME);
+  AddProperty(xuid, &GAMER_ZONE);
+  AddProperty(xuid, &GAMER_COUNTRY);
+  AddProperty(xuid, &GAMER_LANGUAGE);
+  AddProperty(xuid, &PLATFORM_TYPE);
+  AddProperty(xuid, &GAMER_MU);
+  AddProperty(xuid, &GAMER_SIGMA);
+}
+
+void UserTracker::AddDefaultContexts() {
+  if (!spa_data_) {
+    return;
+  }
+
+  for (const uint64_t xuid : tracked_xuids_) {
+    AddDefaultContexts(xuid);
+  }
+}
+
+void UserTracker::AddDefaultContexts(uint64_t xuid) {
+  Property GAME_MODE = Property(XCONTEXT_GAME_MODE, static_cast<uint32_t>(0));
+  Property GAME_TYPE = Property(XCONTEXT_GAME_TYPE, static_cast<uint32_t>(0));
+
+  if (kernel_state()->emulator()->game_info_database()->HasXLast()) {
+    const util::XLast* xlast =
+        kernel_state()->emulator()->game_info_database()->GetXLast();
+
+    bool initialize_all_contexts = false;
+
+    // Initialize all contexts to default values
+    if (initialize_all_contexts) {
+      for (const uint32_t& context_id :
+           xlast->GetContextsQuery()->GetContextsIDs()) {
+        std::optional<uint32_t> default_value =
+            xlast->GetContextsQuery()->GetContextDefaultValue(context_id);
+
+        if (default_value.has_value()) {
+          Property prop = Property(context_id, default_value.value());
+
+          AddProperty(xuid, &prop);
+        }
+      }
+    }
+
+    // System contexts
+    std::optional<uint32_t> game_mode_default =
+        xlast->GetGameModeQuery()->GetGameModeDefaultValue();
+    std::optional<uint32_t> game_type_default =
+        xlast->GetContextsQuery()->GetContextDefaultValue(XCONTEXT_GAME_TYPE);
+
+    if (game_mode_default.has_value()) {
+      GAME_MODE = Property(XCONTEXT_GAME_MODE, game_mode_default.value());
+    }
+
+    if (game_type_default.has_value()) {
+      GAME_TYPE = Property(XCONTEXT_GAME_TYPE, game_type_default.value());
+    }
+  }
+
+  AddProperty(xuid, &GAME_MODE);
+  AddProperty(xuid, &GAME_TYPE);
+}
+
+std::u16string UserTracker::GetContextLocalizedString(uint64_t xuid,
+                                                      uint32_t id) const {
+  const Property* context = GetProperty(xuid, id);
+
+  if (!context) {
+    return u"";
+  }
+
+  if (id == XCONTEXT_GAME_MODE) {
+    return GetContextGameModeLocalizedString(xuid);
+  }
+
+  if (id == XCONTEXT_PRESENCE) {
+    auto user = kernel_state()->xam_state()->GetUserProfile(xuid);
+    if (!user) {
+      return u"";
+    }
+
+    return user->GetPresenceString();
+  }
+
+  std::u16string localized_string = u"";
+
+  if (kernel_state()->emulator()->game_info_database()->HasXLast()) {
+    util::XLast* xlast =
+        kernel_state()->emulator()->game_info_database()->GetXLast();
+
+    util::XLastContextsQuery* context_query = xlast->GetContextsQuery();
+
+    std::optional<std::uint32_t> context_value_string =
+        context_query->GetContextValueStringID(id,
+                                               context->get_data()->data.u32);
+
+    if (context_value_string.has_value()) {
+      localized_string = xlast->GetLocalizedString(
+          context_value_string.value(),
+          static_cast<XLanguage>(cvars::user_language));
+    }
+  }
+
+  return localized_string;
+}
+
+std::u16string UserTracker::GetContextGameModeLocalizedString(
+    uint64_t xuid) const {
+  const Property* context = GetProperty(xuid, XCONTEXT_GAME_MODE);
+
+  if (!context) {
+    return u"";
+  }
+
+  std::u16string localized_string = u"";
+
+  if (kernel_state()->emulator()->game_info_database()->HasXLast()) {
+    util::XLast* xlast =
+        kernel_state()->emulator()->game_info_database()->GetXLast();
+
+    util::XLastGameModeQuery* gamemode_query = xlast->GetGameModeQuery();
+
+    std::optional<std::uint32_t> gamemode_value_string =
+        gamemode_query->GetGameModeStringID(context->get_data()->data.u32);
+
+    if (gamemode_value_string.has_value()) {
+      localized_string = xlast->GetLocalizedString(
+          gamemode_value_string.value(),
+          static_cast<XLanguage>(cvars::user_language));
+    }
+  }
+
+  return localized_string;
+}
+
+std::u16string UserTracker::GetContextDescription(uint64_t xuid,
+                                                  uint32_t id) const {
+  const auto& context_data = spa_data_->GetContext(id);
+  if (!context_data) {
+    return u"";
+  }
+
+  const Property* context = GetProperty(xuid, id);
+
+  std::set<std::u16string, CompareEqualString> context_strings = {};
+
+  switch (id) {
+    case XCONTEXT_PRESENCE: {
+      auto user = kernel_state()->xam_state()->GetUserProfile(xuid);
+      if (!user) {
+        return u"";
+      }
+
+      context_strings.emplace(user->GetPresenceString());
+    } break;
+    case XCONTEXT_GAME_MODE: {
+      context_strings.emplace(GetContextGameModeLocalizedString(xuid));
+    } break;
+    default: {
+      uint16_t string_id = context_data->string_id;
+
+      if (string_id == std::numeric_limits<uint16_t>::max()) {
+        return u"";
+      }
+
+      context_strings.emplace(GetContextLocalizedString(xuid, id));
+
+      if (kernel_state()->emulator()->game_info_database()->HasXLast()) {
+        auto context_query = kernel_state()
+                                 ->emulator()
+                                 ->game_info_database()
+                                 ->GetXLast()
+                                 ->GetContextsQuery();
+
+        std::optional<std::string> friendly_name =
+            context_query->GetContextFriendlyName(context_data->id);
+
+        if (friendly_name.has_value()) {
+          context_strings.emplace(xe::to_utf16(friendly_name.value()));
+        }
+      }
+    } break;
+  }
+
+  if (context_strings.empty()) {
+    return u"";
+  }
+
+  std::u16string context_desc = u"";
+
+  for (uint32_t index = 1; const auto& desc : context_strings) {
+    if (desc.empty()) {
+      continue;
+    }
+
+    context_desc.append(desc);
+
+    if (index != context_strings.size()) {
+      context_desc.append(u", ");
+    }
+
+    index++;
+  }
+
+  if (!context_desc.empty()) {
+    std::string context_desc_fmt =
+        fmt::format("Context: {:08X} - {}", context_data->id.get(),
+                    xe::to_utf8(context_desc));
+
+    context_desc = xe::to_utf16(context_desc_fmt);
+  }
+
+  return context_desc;
+}
+
+std::u16string UserTracker::GetPropertyDescription(uint32_t id) const {
+  std::set<std::u16string, CompareEqualString> property_strings = {};
+
+  const auto& property_data = spa_data_->GetProperty(id);
+  if (!property_data) {
+    return u"";
+  }
+
+  uint16_t string_id = property_data->string_id;
+
+  if (string_id == std::numeric_limits<uint16_t>::max()) {
+    return u"";
+  }
+
+  if (kernel_state()->emulator()->game_info_database()->HasXLast()) {
+    util::XLast* xlast =
+        kernel_state()->emulator()->game_info_database()->GetXLast();
+
+    std::u16string localized_string = xlast->GetLocalizedString(
+        property_data->string_id, static_cast<XLanguage>(cvars::user_language));
+
+    property_strings.emplace(localized_string);
+
+    const auto property_query = xlast->GetPropertiesQuery();
+
+    std::optional<std::string> friendly_name =
+        property_query->GetPropertyFriendlyName(property_data->id);
+
+    if (friendly_name.has_value()) {
+      property_strings.emplace(xe::to_utf16(friendly_name.value()));
+    }
+  }
+
+  std::u16string property_desc = u"";
+
+  for (uint32_t index = 1; const auto& desc : property_strings) {
+    if (desc.empty()) {
+      continue;
+    }
+
+    property_desc.append(desc);
+
+    if (index != property_strings.size()) {
+      property_desc.append(u", ");
+    }
+
+    index++;
+  }
+
+  std::string property_desc_fmt =
+      fmt::format("Property: {:08X} - {}", property_data->id.get(),
+                  xe::to_utf8(property_desc));
+
+  property_desc = xe::to_utf16(property_desc_fmt);
+
+  return property_desc;
 }
 
 // Privates
@@ -206,7 +539,7 @@ bool UserTracker::IsUserTracked(uint64_t xuid) const {
 std::optional<TitleInfo> UserTracker::GetUserTitleInfo(
     uint64_t xuid, uint32_t title_id) const {
   if (!IsUserTracked(xuid)) {
-    XELOGW("{}: User is not on tracking list!", __func__);
+    XELOGW("{}: User is not on tracking list!");
     return std::nullopt;
   }
 
@@ -235,15 +568,15 @@ std::optional<TitleInfo> UserTracker::GetUserTitleInfo(
   info.icon = game_gpd->second.GetImage(kXdbfIdTitle);
 
   if (title_data->last_played.is_valid()) {
-    info.last_played =
-        chrono::WinSystemClock::to_sys(title_data->last_played.to_time_point());
+    info.last_played = chrono::WinSystemClock::to_local(
+        title_data->last_played.to_time_point());
   }
 
   return info;
 }
 
 std::vector<TitleInfo> UserTracker::GetPlayedTitles(uint64_t xuid) const {
-  auto user = kernel_state()->xam_state()->GetUserProfile(xuid);
+  auto user = kernel_state()->xam_state()->GetUserProfileAny(xuid);
   if (!user) {
     return {};
   }
@@ -270,7 +603,7 @@ std::vector<TitleInfo> UserTracker::GetPlayedTitles(uint64_t xuid) const {
     info.title_name = user->dashboard_gpd_.GetTitleName(title_data->title_id);
 
     if (title_data->last_played.is_valid()) {
-      info.last_played = chrono::WinSystemClock::to_sys(
+      info.last_played = chrono::WinSystemClock::to_local(
           title_data->last_played.to_time_point());
     }
 
@@ -456,13 +789,30 @@ void UserTracker::AddProperty(const uint64_t xuid, const Property* property) {
 
   if (property->IsContext()) {
     const auto context_data = spa_data_->GetContext(property_id.value);
-    if (!context_data) {
-      return;
+    if (UserData::is_system_property(property_id.value)) {
+      if (!context_data) {
+        XELOGD("{}: System Context {:08X} not in SPA - Adding anyway!",
+               __func__, property_id.value);
+      }
+    } else {
+      if (!context_data) {
+        return;
+      }
     }
   } else {
     const auto property_data = spa_data_->GetProperty(property_id.value);
-    if (!property_data) {
-      return;
+
+    // 534507D4 doesn't include system properties in SPA therefore we must
+    // always add system properties
+    if (UserData::is_system_property(property_id.value)) {
+      if (!property_data) {
+        XELOGD("{}: System Property {:08X} not in SPA - Adding anyway!",
+               __func__, property_id.value);
+      }
+    } else {
+      if (!property_data) {
+        return;
+      }
     }
   }
 
@@ -734,7 +1084,7 @@ void UserTracker::UpsertSetting(uint64_t xuid, uint32_t title_id,
   // Sometimes games like to ignore providing expicitly title_id, so we need to
   // check it.
   if (!title_id) {
-    title_id = spa_data_ ? spa_data_->title_id() : kernel_state()->title_id();
+    title_id = spa_data_->title_id();
   }
 
   GpdInfo* info = user->GetGpd(title_id);

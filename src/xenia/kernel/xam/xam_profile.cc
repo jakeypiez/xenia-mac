@@ -85,7 +85,8 @@ dword_result_t XamProfileCreate_entry(
   }
 
   const uint64_t proper_xuid =
-      xuid == 0 ? GenerateXuid() : static_cast<uint64_t>(xuid);
+      xuid == 0 ? kernel_state()->xam_state()->profile_manager()->GenerateXuid()
+                : static_cast<uint64_t>(xuid);
   profile_info->offline_xuid = proper_xuid;
   profile_info->account_info = *account;
 

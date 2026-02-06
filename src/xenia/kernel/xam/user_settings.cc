@@ -85,7 +85,9 @@ std::optional<UserSetting> UserSetting::GetDefaultSetting(
       return std::make_optional<UserSetting>(
           static_cast<UserSettingId>(setting_id), std::vector<uint8_t>());
     default:
-      assert_always();
+      XELOGE("{}: Unknown X_USER_DATA_TYPE: {}", __func__,
+             static_cast<uint8_t>(type));
+      return std::nullopt;
   }
 
   XELOGE("{}: Unknown X_USER_DATA_TYPE: {}", __func__,

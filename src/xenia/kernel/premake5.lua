@@ -11,11 +11,19 @@ project("xenia-kernel")
     "fmt",
     "zlib-ng",
     "pugixml",
+    "libcurl",
+    "miniupnp",
     "xenia-apu",
     "xenia-base",
     "xenia-cpu",
     "xenia-hid",
     "xenia-vfs",
+  })
+  includedirs({
+    project_root.."/third_party/libcurl/include",
+    project_root.."/third_party/miniupnp/miniupnpc/include",
+    project_root.."/third_party/rapidcsv/src",
+    project_root.."/third_party/rapidjson/include",
   })
   defines({
     "X86_FEATURES",
@@ -23,6 +31,8 @@ project("xenia-kernel")
     "X86_SSSE3",
     "X86_SSE42",
     "WITH_GZFILEOP",
+    "CURL_STATICLIB",
+    "MINIUPNP_STATICLIB",
   })
   if os.istarget("windows") then
     defines({

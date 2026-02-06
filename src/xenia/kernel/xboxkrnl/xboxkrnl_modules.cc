@@ -39,6 +39,21 @@ dword_result_t XexCheckExecutablePrivilege_entry(dword_t privilege) {
 }
 DECLARE_XBOXKRNL_EXPORT1(XexCheckExecutablePrivilege, kModules, kImplemented);
 
+// Public callable version for internal C++ use
+bool XexCheckExecutablePrivilege(uint32_t privilege) {
+  uint32_t mask = 1 << privilege;
+
+  auto module = kernel_state()->GetExecutableModule();
+  if (!module) {
+    return false;
+  }
+
+  uint32_t flags = 0;
+  module->GetOptHeader<uint32_t>(XEX_HEADER_SYSTEM_FLAGS, &flags);
+
+  return (flags & mask) > 0;
+}
+
 dword_result_t XexGetModuleHandle(std::string module_name,
                                   xe::be<uint32_t>* hmodule_ptr) {
   object_ref<XModule> module;

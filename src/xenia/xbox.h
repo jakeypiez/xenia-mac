@@ -12,8 +12,11 @@
 
 #include <map>
 #include <string>
+#include <string_view>
 
 #include "xenia/base/assert.h"
+#include "xenia/base/byte_order.h"
+#include "xenia/base/string.h"
 // clang-format off
 namespace xe {
 
@@ -130,6 +133,7 @@ typedef uint32_t X_HRESULT;
 #define X_E_NOTFOUND                            X_HRESULT_FROM_WIN32(X_ERROR_NOT_FOUND)
 #define X_E_NO_SUCH_USER                        X_HRESULT_FROM_WIN32(X_ERROR_NO_SUCH_USER)
 #define X_E_FUNCTION_FAILED                     X_HRESULT_FROM_WIN32(X_ERROR_FUNCTION_FAILED)
+#define X_E_INSUFFICIENT_BUFFER                 X_HRESULT_FROM_WIN32(X_ERROR_INSUFFICIENT_BUFFER)
 
 // Sockets/networking.
 #define X_INVALID_SOCKET (uint32_t)(~0)
@@ -539,6 +543,120 @@ struct XTTFileHeader {
   uint32_t uncompressedTablesSize;
   uint32_t xttFileVersion;
 };
+
+#pragma pack(push, 4)
+struct X_XAMACCOUNTINFO {
+  enum AccountReservedFlags {
+    kPasswordProtected = 0x10000000,
+    kLiveEnabled = 0x20000000,
+    kRecovering = 0x40000000,
+    kVersionMask = 0x000000FF
+  };
+
+  enum AccountUserFlags {
+    kPaymentInstrumentCreditCard = 1,
+
+    kCountryMask = 0xFF00,
+    kSubscriptionTierMask = 0xF00000,
+    kLanguageMask = 0x3E000000,
+
+    kParentalControlEnabled = 0x1000000,
+  };
+
+  enum AccountSubscriptionTier {
+    kSubscriptionTierNone = 0,
+    kSubscriptionTierSilver = 3,
+    kSubscriptionTierGold = 6,
+    kSubscriptionTierFamilyGold = 9
+  };
+
+  enum AccountLiveFlags { kAcctRequiresManagement = 1 };
+
+  xe::be<uint32_t> reserved_flags;
+  xe::be<uint32_t> live_flags;
+  char16_t gamertag[0x10];
+  xe::be<uint64_t> xuid_online;  // 09....
+  xe::be<uint32_t> cached_user_flags;
+  xe::be<uint32_t> network_id;
+  char passcode[4];
+  char online_domain[0x14];
+  char online_kerberos_realm[0x18];
+  char online_key[0x10];
+  char passport_membername[0x72];
+  char passport_password[0x20];
+  char owner_passport_membername[0x72];
+
+  bool IsPasscodeEnabled() const {
+    return static_cast<bool>(reserved_flags &
+                             AccountReservedFlags::kPasswordProtected);
+  }
+
+  bool IsLiveEnabled() const {
+    return static_cast<bool>(reserved_flags &
+                             AccountReservedFlags::kLiveEnabled);
+  }
+
+  uint64_t GetOnlineXUID() const { return xuid_online; }
+
+  std::string_view GetOnlineDomain() const {
+    return std::string_view(online_domain);
+  }
+
+  uint32_t GetReservedFlags() const { return reserved_flags; };
+  uint32_t GetCachedFlags() const { return cached_user_flags; };
+
+  XOnlineCountry GetCountry() const {
+    return static_cast<XOnlineCountry>((cached_user_flags & kCountryMask) >> 8);
+  }
+
+  AccountSubscriptionTier GetSubscriptionTier() const {
+    return static_cast<AccountSubscriptionTier>(
+        (cached_user_flags & kSubscriptionTierMask) >> 20);
+  }
+
+  bool IsParentalControlled() const {
+    return static_cast<bool>((cached_user_flags & kLanguageMask) >> 24);
+  }
+
+  XLanguage GetLanguage() const {
+    return static_cast<XLanguage>((cached_user_flags & kLanguageMask) >> 25);
+  }
+
+  std::string GetGamertagString() const {
+    return xe::to_utf8(std::u16string(gamertag));
+  }
+
+  void ToggleLiveFlag(bool is_live) {
+    reserved_flags = reserved_flags & ~AccountReservedFlags::kLiveEnabled;
+
+    if (is_live) {
+      reserved_flags = reserved_flags | AccountReservedFlags::kLiveEnabled;
+    }
+  }
+
+  void SetCountry(XOnlineCountry country) {
+    cached_user_flags = cached_user_flags & ~kCountryMask;
+    cached_user_flags = cached_user_flags |
+                        (static_cast<uint32_t>(country) << 8) & kCountryMask;
+  }
+
+  void SetLanguage(XLanguage language) {
+    cached_user_flags = cached_user_flags & ~kLanguageMask;
+
+    cached_user_flags = cached_user_flags |
+                        (static_cast<uint32_t>(language) << 25) & kLanguageMask;
+  }
+
+  void SetSubscriptionTier(AccountSubscriptionTier sub_tier) {
+    cached_user_flags = cached_user_flags & ~kSubscriptionTierMask;
+
+    cached_user_flags =
+        cached_user_flags |
+        (static_cast<uint32_t>(sub_tier) << 20) & kSubscriptionTierMask;
+  }
+};
+#pragma pack(pop)
+static_assert_size(X_XAMACCOUNTINFO, 0x17C);
 
 }  // namespace xe
 
