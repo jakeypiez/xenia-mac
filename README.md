@@ -19,6 +19,7 @@ A macOS fork of [Xenia Canary](https://github.com/xenia-canary/xenia-canary) wit
 
 - **macOS 15.0+** (Sequoia)
 - **Apple Silicon** (M1/M2/M3/M4/M5)
+- No Homebrew or other dependencies needed — everything is bundled in the `.app`
 
 ## Download
 

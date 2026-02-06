@@ -125,13 +125,10 @@ third_party/       # External dependencies
 ### Prerequisites (macOS)
 ```bash
 xcode-select --install
-brew install sdl2 lz4 openssl@3 python@3.12  # Python 3.10+ required, OpenSSL for netplay HTTPS
+brew install sdl2 lz4 openssl@3  # Build dependencies (bundled in .app for end users)
 ```
 
-**Note**: Python 3.10+ 64-bit is required. If your system Python is older, use Homebrew's Python:
-```bash
-/usr/local/Cellar/python@3.12/*/bin/python3.12 xenia-build.py build --arch=x86_64
-```
+Python 3.10+ 64-bit is required for the build script (`xenia-build.py`).
 
 ### Build Commands
 ```bash

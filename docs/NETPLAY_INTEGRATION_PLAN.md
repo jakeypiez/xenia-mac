@@ -793,7 +793,7 @@ Changes made via the Network menu UI are automatically saved to `xenia-canary.co
 ```
 
 ### macOS-Specific Notes
-- TLS uses OpenSSL 3 (bundled in the .app — requires `brew install openssl@3`)
+- TLS uses OpenSSL 3 (bundled in the .app Frameworks — no Homebrew needed for end users)
 - Network interface discovery uses `getifaddrs()` — set `--network_guid=en0` for Wi-Fi
 - UPnP port forwarding works via miniupnpc — multicast interface is auto-bound to the selected network interface; macOS Local Network permission is handled via Info.plist entries and a 3-attempt retry loop
 - Discord rich presence is not available on macOS
