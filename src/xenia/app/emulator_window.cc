@@ -204,7 +204,7 @@ EmulatorWindow::EmulatorWindow(Emulator* emulator,
 #ifdef XE_BUILD_IS_PR
                 "PR#" XE_BUILD_PR_NUMBER " - "
 #endif
-                "xenia-mac-netplay" "@" XE_BUILD_COMMIT_SHORT " on " XE_BUILD_DATE
+                "Xenia" "@" XE_BUILD_COMMIT_SHORT " on " XE_BUILD_DATE
                 ")";
 
   LoadRecentlyLaunchedTitles();

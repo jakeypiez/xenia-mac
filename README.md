@@ -4,7 +4,7 @@
     </a>
 </p>
 
-<h1 align="center">Xenia-Mac-Netplay — Xbox 360 Emulator for macOS with Netplay</h1>
+<h1 align="center">Xenia — Xbox 360 Emulator for macOS with Netplay</h1>
 
 A macOS fork of [Xenia Canary](https://github.com/xenia-canary/xenia-canary) with full **netplay/online multiplayer** support, ported from [AdrianCassar's netplay branch](https://github.com/AdrianCassar/xenia-canary) (v5.0.0).
 
