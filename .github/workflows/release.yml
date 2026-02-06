@@ -104,11 +104,6 @@ jobs:
             1. Download the `.dmg` file below
             2. Open the DMG and drag **Xenia-Mac-Netplay** to Applications
             3. Right-click the app → Open (first launch only, to bypass Gatekeeper)
-
-            ### Homebrew runtime dependencies
-            ```
-            brew install sdl2 lz4 openssl@3
-            ```
           files: Xenia-Mac-Netplay-macOS-ARM64.dmg
           draft: false
           prerelease: false
