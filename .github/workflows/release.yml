@@ -37,8 +37,12 @@ jobs:
               -e "s|\"version\"|\"${UPNP_VER}\"|" \
               miniupnpcstrings.h.in > miniupnpcstrings.h
 
-      - name: Copy curl_config.h
-        run: cp third_party/curl_config_macos.h third_party/libcurl/lib/curl_config.h
+      - name: Copy generated build files
+        run: |
+          cp third_party/generated_macos/curl_config.h third_party/libcurl/lib/curl_config.h
+          cp third_party/generated_macos/ffmpeg_protocol_list.c third_party/FFmpeg/libavformat/protocol_list.c
+          cp third_party/generated_macos/ffmpeg_demuxer_list.c third_party/FFmpeg/libavformat/demuxer_list.c
+          cp third_party/generated_macos/ffmpeg_muxer_list.c third_party/FFmpeg/libavformat/muxer_list.c
 
       - name: Setup and build
         run: |
