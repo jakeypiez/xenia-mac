@@ -1,8 +1,8 @@
-# Xenia macOS Fork - Copilot Instructions
+# Xenia-Mac-Netplay - Copilot Instructions
 
 ## Project Overview
 
-Xenia is an open-source Xbox 360 emulator, originally developed by Ben Vanik. This fork targets **macOS** with support for **Apple Silicon (ARM64)** and **Intel x86_64** architectures, using **Metal** as the graphics backend instead of Direct3D12/Vulkan.
+Xenia-Mac-Netplay is a macOS fork of [Xenia Canary](https://github.com/xenia-canary/xenia-canary) with full **netplay/online multiplayer** support, ported from [AdrianCassar's netplay branch](https://github.com/AdrianCassar/xenia-canary) (v5.0.0). It targets **macOS** with support for **Apple Silicon (ARM64)** and **Intel x86_64** architectures, using **Metal** as the graphics backend.
 
 ### Key Characteristics
 - **Language**: C++20 with some Objective-C++ (`.mm` files) for Metal/macOS integration
@@ -10,6 +10,9 @@ Xenia is an open-source Xbox 360 emulator, originally developed by Ben Vanik. Th
 - **Target Platforms**: macOS 15.0+ (Sequoia)
 - **Graphics API**: Metal (Apple's GPU API)
 - **CPU Backend**: ARM64 backend using Oaknut JIT library, or x64 backend using Xbyak
+- **Netplay**: Xbox Live online multiplayer via Xenia-WebServices backend, Systemlink LAN
+- **Repo**: https://github.com/jakeypiez/xenia-mac-netplay
+- **Bundle ID**: `com.jakeypiez.xenia-mac-netplay`
 
 ## Architecture Overview
 
@@ -34,9 +37,18 @@ src/xenia/
 │   └── null/      # Null graphics backend for testing
 ├── hid/           # Human Interface Device (input) drivers
 ├── kernel/        # Xbox 360 kernel emulation
-│   ├── xam/       # Xbox Accessory Manager modules
+│   ├── xam/       # Xbox Accessory Manager modules (profiles, networking, UI)
+│   │   ├── apps/  # XGI and XLiveBase app handlers (session RPCs)
+│   │   └── unmarshaller/ # 20 unmarshaller files for network data
 │   ├── xboxkrnl/  # Core Xbox kernel modules
-│   └── xbdm/      # Xbox Debug Manager
+│   ├── xbdm/      # Xbox Debug Manager
+│   ├── json/      # 26 JSON serialization files (RapidJSON-based)
+│   ├── util/      # Network utilities, game info database, XLast, presence
+│   ├── XLiveAPI.cpp/.h   # HTTP REST client for netplay backend
+│   ├── xsession.cc/.h    # Xbox session management
+│   ├── xsocket.cc/.h     # Xbox socket handling (macOS POSIX)
+│   ├── xnet.h             # Network definitions (macOS platform stubs)
+│   └── upnp.cc/.h        # UPnP port forwarding via miniupnpc
 ├── patcher/       # Game patching functionality
 ├── ui/            # User interface (ImGui-based)
 ├── vfs/           # Virtual File System
@@ -52,6 +64,9 @@ third_party/       # External dependencies
 ├── capstone/      # Disassembler for debugging
 ├── imgui/         # Immediate mode GUI
 ├── SDL2/          # Cross-platform windowing/input
+├── libcurl/       # HTTP client (OpenSSL 3 TLS on macOS)
+├── miniupnp/      # UPnP port forwarding library
+├── rapidjson/     # JSON parsing for netplay API
 └── ...
 ```
 
@@ -79,6 +94,24 @@ third_party/       # External dependencies
 - **xam**: Xbox Accessory Manager (user profiles, content, networking)
 - **Key Files**: `kernel_state.cc`, `xthread.cc`, `user_module.cc`
 
+#### Netplay / Networking (`src/xenia/kernel/`)
+- **XLiveAPI** (`XLiveAPI.cpp/.h`): HTTP REST client for Xenia-WebServices backend
+  - Manages player sessions, matchmaking, presence, XStorage
+  - Uses libcurl with OpenSSL 3 for HTTPS
+  - Network interface discovery via `getifaddrs()` on macOS
+  - `Init()` → discovers interfaces → selects interface → initializes UPnP → connects to backend
+- **UPnP** (`upnp.cc/.h`): Port forwarding via miniupnpc
+  - `Initialize(multicast_if)` — binds to specific interface, 3-attempt retry loop
+  - `SearchUPnP()` — discovers IGD and maps ports (3074 UDP/TCP)
+  - `Deactivate()` — removes port mappings and resets state
+  - macOS requires `NSLocalNetworkUsageDescription` + `NSBonjourServices` in Info.plist
+- **XSession** (`xsession.cc/.h`): Xbox session create/browse/join
+- **XSocket** (`xsocket.cc/.h`): Xbox socket abstraction (POSIX on macOS)
+- **XAM Apps** (`xam/apps/xgi_app.cc`, `xlivebase_app.cc`): Session RPC handlers
+- **JSON** (`json/`): 26 RapidJSON serialization files for API payloads
+- **Unmarshaller** (`xam/unmarshaller/`): 20 files for network data marshalling
+- **Backend**: https://xenia-netplay-2a0298c0e3f4.herokuapp.com/
+
 #### Virtual File System (`src/xenia/vfs/`)
 - **Device Types**:
   - `xcontent_container_device` - STFS/SVOD content packages (XBLA games)
@@ -91,7 +124,7 @@ third_party/       # External dependencies
 ### Prerequisites (macOS)
 ```bash
 xcode-select --install
-brew install sdl2 lz4 python@3.12  # Python 3.10+ required
+brew install sdl2 lz4 openssl@3 python@3.12  # Python 3.10+ required, OpenSSL for netplay HTTPS
 ```
 
 **Note**: Python 3.10+ 64-bit is required. If your system Python is older, use Homebrew's Python:
@@ -116,8 +149,9 @@ brew install sdl2 lz4 python@3.12  # Python 3.10+ required
   ```
 
 ### Build Artifacts
-- Debug: `build/bin/Debug/xenia.app`
-- Release: `build/bin/Release/xenia.app`
+- Debug: `build/bin/Mac-ARM64/Debug/Xenia-Mac-Netplay.app`
+- Release: `build/bin/Mac-ARM64/Release/Xenia-Mac-Netplay.app`
+- Checked: `build/bin/Mac-ARM64/Checked/Xenia-Mac-Netplay.app`
 
 ### Key Premake Files
 - `premake5.lua` - Root build configuration
@@ -157,6 +191,10 @@ brew install sdl2 lz4 python@3.12  # Python 3.10+ required
 - Metal backend is the only supported GPU backend
 - Discord presence is disabled on macOS
 - Debug UI is disabled on ARM64 (TODO: port host context handling)
+- UPnP multicast requires Info.plist `NSLocalNetworkUsageDescription` + `NSBonjourServices` (`_ssdp._udp.`)
+- XAM dialog creation deferred to UI thread via `CallInUIThread()` factory pattern (prevents ImGui threading crashes)
+- Release builds default to `log_level=1` (Warning) and `log_to_stdout=false`
+- OpenSSL 3 dylibs bundled in `.app/Contents/Frameworks/` via postbuild script
 
 ### Xbox 360 Game Formats
 - **XBLA (Xbox Live Arcade)**: STFS containers with title ID folders
@@ -169,10 +207,22 @@ brew install sdl2 lz4 python@3.12  # Python 3.10+ required
 --gpu=metal              # Graphics system (metal, null)
 --apu=sdl                # Audio system (sdl, nop)
 --log_file=stdout        # Log to console
---log_level=3            # Verbose logging
+--log_level=3            # Verbose logging (Release defaults to 1=Warning)
 --mount_cache=true       # Enable cache mount
 --target=/path/to/game   # Game path
+
+# Netplay CVars
+--network_mode=2         # 0=Offline, 1=Systemlink, 2=Xbox Live (default)
+--api_address=host:port/ # Netplay server address
+--upnp=true              # Enable UPnP port forwarding
+--xstorage_backend=true  # Use backend for XStorage
+--logging=false          # Log network activity & stats
+--log_mask_ips=true      # Don't include P2P IPs in logs
+--network_guid=en0       # Network interface name
 ```
+
+Config file: `~/.local/share/Xenia/xenia-canary.config.toml`
+Settings changed via Network menu UI are persisted via `OverrideConfigVar<T>()` + `SaveConfig()`.
 
 ## Debugging Tips
 - Build with Debug configuration for symbols
@@ -184,13 +234,19 @@ brew install sdl2 lz4 python@3.12  # Python 3.10+ required
 ## Running Games
 ```bash
 # Run an XBLA game (STFS container)
-./build/bin/Debug/xenia.app/Contents/MacOS/xenia "/path/to/0000000000000000/TITLEID/CONTENTID/STFSFILE"
+./build/bin/Mac-ARM64/Debug/Xenia-Mac-Netplay.app/Contents/MacOS/xenia "/path/to/0000000000000000/TITLEID/CONTENTID/STFSFILE"
 
 # Run with debug logging
-./build/bin/Debug/xenia.app/Contents/MacOS/xenia --log_file=stdout --log_level=3 "/path/to/game"
+./build/bin/Mac-ARM64/Debug/Xenia-Mac-Netplay.app/Contents/MacOS/xenia --log_file=stdout --log_level=3 "/path/to/game"
 
 # Run a disc XEX
-./build/bin/Debug/xenia.app/Contents/MacOS/xenia "/path/to/default.xex"
+./build/bin/Mac-ARM64/Debug/Xenia-Mac-Netplay.app/Contents/MacOS/xenia "/path/to/default.xex"
+
+# Run with netplay (Xbox Live mode, default)
+./build/bin/Mac-ARM64/Release/Xenia-Mac-Netplay.app/Contents/MacOS/xenia --network_mode=2 "/path/to/game"
+
+# Run in Systemlink (LAN) mode
+./build/bin/Mac-ARM64/Release/Xenia-Mac-Netplay.app/Contents/MacOS/xenia --network_mode=1 "/path/to/game"
 ```
 
 ## Key Entry Points for Investigation
@@ -199,3 +255,44 @@ brew install sdl2 lz4 python@3.12  # Python 3.10+ required
 - STFS container: `XContentContainerDevice` in `vfs/devices/`
 - GPU commands: `CommandProcessor::ExecutePacket()` in `gpu/command_processor.cc`
 - Kernel calls: `xboxkrnl/` and `xam/` modules
+- Netplay init: `XLiveAPI::Init()` in `kernel/XLiveAPI.cpp`
+- UPnP discovery: `UPnP::Initialize()` in `kernel/upnp.cc`
+- Session management: `XSession` in `kernel/xsession.cc`
+- Network UI: `NetplayConfigDialog` in `app/emulator_window.cc`
+- Dialog dispatch: `xeXamDispatchDialogAsync<T>` in `kernel/xam/xam_ui.cc`
+- Config persistence: `OverrideConfigVar<T>()` helper in `app/emulator_window.cc`
+
+## Netplay Architecture
+
+### Network Flow
+1. `XLiveAPI::Init()` is called when network mode is Xbox Live (2)
+2. `DiscoverNetworkInterfaces()` enumerates via `getifaddrs()` on macOS
+3. `SelectNetworkInterface()` picks the active interface
+4. `UPnP::Initialize(LocalIP_str())` discovers IGD router, maps ports 3074 UDP/TCP
+5. HTTP POST to backend registers player, gets online IP
+6. Game calls XSession APIs → routed through `xgi_app.cc` / `xlivebase_app.cc`
+
+### Config Persistence Pattern
+CVars are defined with `DEFINE_bool/int32/string` in their respective `.cc` files.
+To override from a different translation unit (e.g., `emulator_window.cc`):
+```cpp
+template <typename T>
+void OverrideConfigVar(const std::string& name, T value) {
+  // Uses cvar::ConfigVars global map to find and update config_value_
+}
+// Then call config::SaveConfig() to write to xenia-canary.config.toml
+```
+
+### Dialog Threading Pattern
+XAM dialogs (SigninUI, MessageBoxDialog, etc.) must be created on the UI thread:
+```cpp
+xeXamDispatchDialogAsync<T>(kernel_state, thread, factory_fn, args...)
+// factory_fn is a std::function<T*()> invoked via CallInUIThread()
+// Prevents ImGui threading crashes (SIGABRT in ImGui::Begin)
+```
+
+### UPnP macOS Specifics
+- `upnpDiscover()` requires `multicast_if` parameter (local IP) on macOS
+- Info.plist must have `NSLocalNetworkUsageDescription` and `NSBonjourServices`
+- First discovery fails while macOS shows Local Network permission dialog → 3-attempt retry loop with 3s delays
+- `Deactivate()` removes port mappings; re-check via `RefreshPorts()`
