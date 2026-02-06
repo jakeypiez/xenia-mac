@@ -39,6 +39,7 @@ src/xenia/
 ├── kernel/        # Xbox 360 kernel emulation
 │   ├── xam/       # Xbox Accessory Manager modules (profiles, networking, UI)
 │   │   ├── apps/  # XGI and XLiveBase app handlers (session RPCs)
+│   │   ├── ui/    # ImGui dialogs (FriendsUI, SigninUI, GamercardUI, etc.)
 │   │   └── unmarshaller/ # 20 unmarshaller files for network data
 │   ├── xboxkrnl/  # Core Xbox kernel modules
 │   ├── xbdm/      # Xbox Debug Manager
@@ -259,6 +260,7 @@ Settings changed via Network menu UI are persisted via `OverrideConfigVar<T>()` 
 - UPnP discovery: `UPnP::Initialize()` in `kernel/upnp.cc`
 - Session management: `XSession` in `kernel/xsession.cc`
 - Network UI: `NetplayConfigDialog` in `app/emulator_window.cc`
+- Friends UI: `FriendsUI` dialog in `kernel/xam/ui/friends_ui.cc`
 - Dialog dispatch: `xeXamDispatchDialogAsync<T>` in `kernel/xam/xam_ui.cc`
 - Config persistence: `OverrideConfigVar<T>()` helper in `app/emulator_window.cc`
 
@@ -284,12 +286,22 @@ void OverrideConfigVar(const std::string& name, T value) {
 ```
 
 ### Dialog Threading Pattern
-XAM dialogs (SigninUI, MessageBoxDialog, etc.) must be created on the UI thread:
+XAM dialogs (SigninUI, FriendsUI, MessageBoxDialog, etc.) must be created on the UI thread:
 ```cpp
 xeXamDispatchDialogAsync<T>(kernel_state, thread, factory_fn, args...)
 // factory_fn is a std::function<T*()> invoked via CallInUIThread()
 // Prevents ImGui threading crashes (SIGABRT in ImGui::Begin)
 ```
+
+### Friends UI Architecture
+The friends list UI is triggered when games call `XamShowFriendsUI` (ordinal 0x2BF):
+- `xam_ui.cc` dispatches `FriendsUI` dialog via `xeXamDispatchDialogAsync<ui::FriendsUI>`
+- `FriendsUI` constructor kicks off `std::async` fetch of `XLiveAPI::GetAllFriendsPresence()`
+- `OnDraw()` polls the future; when ready, stores results in `friends_presence_result_`
+- `DrawFriendsContent()` renders the main popup with search, filters, and friend entries
+- `DrawFriendContent()` renders each friend: gamertag, XUID, title info, Join/Remove buttons
+- `DrawAddFriend()` renders the "Add Friend" modal with XUID input and validation
+- Shared argument structs in `netplay_manager_util.h`: `FriendsContentArgs`, `AddFriendArgs`
 
 ### UPnP macOS Specifics
 - `upnpDiscover()` requires `multicast_if` parameter (local IP) on macOS

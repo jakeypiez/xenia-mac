@@ -403,6 +403,11 @@ void XmaDecoder::Pause() {
   }
   paused_ = true;
 
+  // Wake the worker thread so it sees the paused_ flag.
+  // Without this, the worker may be in its idle Wait(work_event_) and never
+  // check paused_, causing pause_fence_.Wait() to deadlock.
+  work_event_->Set();
+
   pause_fence_.Wait();
 }
 

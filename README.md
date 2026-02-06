@@ -12,6 +12,7 @@ A macOS fork of [Xenia Canary](https://github.com/xenia-canary/xenia-canary) wit
 
 - **macOS native** — Metal GPU backend, Apple Silicon (ARM64)
 - **Xbox Live netplay** — Online multiplayer via [Xenia-WebServices](https://github.com/AdrianCassar/Xenia-WebServices) backend
+- **Friends list** — In-game friends UI with presence, search, and session joining
 - **Systemlink** — LAN multiplayer without a backend server
 
 ## Requirements

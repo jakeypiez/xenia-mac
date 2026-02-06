@@ -412,6 +412,10 @@ void XLiveAPI::Init() {
 
   initialized_ = InitState::Success;
 
+  // Notify games that Xbox Live connection is established.
+  kernel_state()->BroadcastNotification(kXNotificationLiveConnectionChanged,
+                                        X_ONLINE_S_LOGON_CONNECTION_ESTABLISHED);
+
   // Delete sessions on start-up.
   DeleteAllSessions();
 }
@@ -542,6 +546,8 @@ std::unique_ptr<HTTPResponseObjectJSON> XLiveAPI::Post(std::string endpoint,
   // FindPlayers, QoS, SessionSearch
   curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void*)&chunk);
   curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, callback);
+  curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 15L);
+  curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, 10L);
 
   result = curl_easy_perform(curl_handle);
 
@@ -593,6 +599,8 @@ std::unique_ptr<HTTPResponseObjectJSON> XLiveAPI::Delete(std::string endpoint) {
   curl_easy_setopt(curl_handle, CURLOPT_CUSTOMREQUEST, "DELETE");
   curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "xenia");
+  curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 15L);
+  curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT, 10L);
 
   result = curl_easy_perform(curl_handle);
 

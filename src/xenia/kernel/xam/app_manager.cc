@@ -9,6 +9,7 @@
 
 #include "xenia/kernel/xam/app_manager.h"
 
+#include "xenia/base/logging.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/xam/apps/messenger_app.h"
 #include "xenia/kernel/xam/apps/xam_app.h"
@@ -46,7 +47,12 @@ X_HRESULT AppManager::DispatchMessageSync(uint32_t app_id, uint32_t message,
   if (it == app_lookup_.end()) {
     return X_E_NOTFOUND;
   }
-  return it->second->DispatchMessageSync(message, buffer_ptr, buffer_length);
+  XELOGI("DispatchMessageSync: app={:08X} msg={:08X} buf={:08X} len={}",
+         app_id, message, buffer_ptr, buffer_length);
+  auto result = it->second->DispatchMessageSync(message, buffer_ptr, buffer_length);
+  XELOGI("DispatchMessageSync: app={:08X} msg={:08X} => {:08X}",
+         app_id, message, result);
+  return result;
 }
 
 X_HRESULT AppManager::DispatchMessageAsync(uint32_t app_id, uint32_t message,
@@ -56,7 +62,12 @@ X_HRESULT AppManager::DispatchMessageAsync(uint32_t app_id, uint32_t message,
   if (it == app_lookup_.end()) {
     return X_E_NOTFOUND;
   }
-  return it->second->DispatchMessageSync(message, buffer_ptr, buffer_length);
+  XELOGI("DispatchMessageAsync: app={:08X} msg={:08X} buf={:08X} len={}",
+         app_id, message, buffer_ptr, buffer_length);
+  auto result = it->second->DispatchMessageSync(message, buffer_ptr, buffer_length);
+  XELOGI("DispatchMessageAsync: app={:08X} msg={:08X} => {:08X}",
+         app_id, message, result);
+  return result;
 }
 
 }  // namespace xam

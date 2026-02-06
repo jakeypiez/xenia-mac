@@ -14,6 +14,7 @@
 #include "xenia/kernel/xam/user_settings.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xenumerator.h"
+#include "xenia/kernel/xsession.h"
 #include "xenia/xbox.h"
 
 #include "third_party/stb/stb_image.h"
@@ -404,8 +405,8 @@ dword_result_t XamUserCheckPrivilege_entry(dword_t user_index, dword_t mask,
     }
   }
 
-  // If we deny everything, games should hopefully not try to do stuff.
-  *out_value = 0;
+  // Grant all privileges so games allow online/multiplayer features.
+  *out_value = 1;
   return X_ERROR_SUCCESS;
 }
 DECLARE_XAM_EXPORT1(XamUserCheckPrivilege, kUserProfiles, kStub);
@@ -864,20 +865,35 @@ dword_result_t XamWriteGamerTile_entry(dword_t user_index, dword_t title_id,
 DECLARE_XAM_EXPORT1(XamWriteGamerTile, kUserProfiles, kStub);
 
 dword_result_t XamSessionCreateHandle_entry(lpdword_t handle_ptr) {
-  *handle_ptr = 0xCAFEDEAD;
+  auto e = object_ref<XSession>(new XSession(kernel_state()));
+  auto result = (uint32_t)e->Initialize();
+  if (XFAILED(result)) {
+    XELOGI("XamSessionCreateHandle: Initialize failed {:08X}", result);
+    return result;
+  }
+
+  *handle_ptr = e->handle();
+  XELOGI("XamSessionCreateHandle: created handle {:08X}", e->handle());
   return X_ERROR_SUCCESS;
 }
-DECLARE_XAM_EXPORT1(XamSessionCreateHandle, kUserProfiles, kStub);
+DECLARE_XAM_EXPORT1(XamSessionCreateHandle, kUserProfiles, kImplemented);
 
 dword_result_t XamSessionRefObjByHandle_entry(dword_t handle,
                                               lpdword_t obj_ptr) {
-  assert_true(handle == 0xCAFEDEAD);
-  // TODO(PermaNull): Implement this properly,
-  // For the time being returning 0xDEADF00D will prevent crashing.
-  *obj_ptr = 0xDEADF00D;
+  auto object = kernel_state()->object_table()->LookupObject<XSession>(handle);
+  if (!object) {
+    XELOGI("XamSessionRefObjByHandle: invalid handle {:08X}", (uint32_t)handle);
+    return X_STATUS_INVALID_HANDLE;
+  }
+
+  object->RetainHandle();
+
+  *obj_ptr = (uint32_t)object->guest_object();
+  XELOGI("XamSessionRefObjByHandle: handle {:08X} -> obj {:08X}",
+         (uint32_t)handle, (uint32_t)object->guest_object());
   return X_ERROR_SUCCESS;
 }
-DECLARE_XAM_EXPORT1(XamSessionRefObjByHandle, kUserProfiles, kStub);
+DECLARE_XAM_EXPORT1(XamSessionRefObjByHandle, kUserProfiles, kImplemented);
 
 dword_result_t XamUserIsUnsafeProgrammingAllowed_entry(dword_t user_index,
                                                        dword_t unk,

@@ -1290,6 +1290,21 @@ bool Emulator::ExceptionCallback(Exception* ex) {
 
   std::string crash_msg;
   crash_msg.append("==== CRASH DUMP ====\n");
+  crash_msg.append(fmt::format("Exception: {}\n",
+      ex->code() == Exception::Code::kIllegalInstruction
+          ? "Illegal Instruction"
+          : ex->code() == Exception::Code::kAccessViolation
+              ? "Access Violation"
+              : "Unknown"));
+  if (ex->code() == Exception::Code::kAccessViolation) {
+    crash_msg.append(fmt::format("Fault Address: 0x{:016X}\n",
+                                 ex->fault_address()));
+    crash_msg.append(fmt::format("Access Type: {}\n",
+        ex->access_violation_operation() ==
+            Exception::AccessViolationOperation::kRead
+            ? "Read"
+            : "Write"));
+  }
   crash_msg.append(fmt::format("Thread ID (Host: 0x{:08X} / Guest: 0x{:08X})\n",
                                current_thread->thread()->system_id(),
                                current_thread->thread_id()));

@@ -25,6 +25,7 @@
 #include "xenia/kernel/xam/ui/game_achievements_ui.h"
 #include "xenia/kernel/xam/ui/gamercard_ui.h"
 #include "xenia/kernel/xam/ui/passcode_ui.h"
+#include "xenia/kernel/xam/ui/friends_ui.h"
 #include "xenia/kernel/xam/ui/signin_ui.h"
 #include "xenia/kernel/xam/ui/title_info_ui.h"
 
@@ -1083,6 +1084,99 @@ dword_result_t XamShowEditProfileUI_entry(dword_t user_index) {
       close);
 }
 DECLARE_XAM_EXPORT1(XamShowEditProfileUI, kUserProfiles, kImplemented);
+
+dword_result_t XamShowFriendsUI_entry(dword_t user_index) {
+  if (user_index >= XUserMaxUserCount && user_index != XUserIndexAny) {
+    return X_ERROR_FUNCTION_FAILED;
+  }
+
+  UserProfile* user = nullptr;
+
+  if (user_index == XUserIndexAny) {
+    if (kernel_state()
+            ->xam_state()
+            ->profile_manager()
+            ->IsAnyProfileSignedIn()) {
+      user =
+          kernel_state()->xam_state()->GetUserProfile(static_cast<uint32_t>(0));
+    }
+  } else {
+    user = kernel_state()->xam_state()->GetUserProfile(user_index);
+  }
+
+  if (!user) {
+    return X_ERROR_FUNCTION_FAILED;
+  }
+
+  const Emulator* emulator = kernel_state()->emulator();
+  xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
+
+  auto close = [](ui::FriendsUI* dialog) -> void {};
+  return xeXamDispatchDialogAsync<ui::FriendsUI>(
+      [imgui_drawer, user]() {
+        return new ui::FriendsUI(imgui_drawer, user);
+      },
+      close);
+}
+DECLARE_XAM_EXPORT1(XamShowFriendsUI, kUserProfiles, kImplemented);
+
+dword_result_t XamShowFriendsUIp_entry(dword_t user_index) {
+  return XamShowFriendsUI_entry(user_index);
+}
+DECLARE_XAM_EXPORT1(XamShowFriendsUIp, kUserProfiles, kImplemented);
+
+// Stub: XamShowFriendRequestUI (ordinal 0x2CE)
+dword_result_t XamShowFriendRequestUI_entry(dword_t user_index,
+                                            qword_t xuid) {
+  XELOGI("XamShowFriendRequestUI({}, {:016X}) - stub",
+         (uint32_t)user_index, (uint64_t)xuid);
+  return xeXamDispatchHeadlessAsync([]() {});
+}
+DECLARE_XAM_EXPORT1(XamShowFriendRequestUI, kUserProfiles, kStub);
+
+// Stub: XamShowGamerCardUIForXUID (ordinal 0x2D5) - takes user_index + xuid
+dword_result_t XamShowGamerCardUIForXUID_entry(dword_t user_index,
+                                               qword_t xuid_player) {
+  XELOGI("XamShowGamerCardUIForXUID({}, {:016X}) - stub",
+         (uint32_t)user_index, (uint64_t)xuid_player);
+  // Reuse the existing GamerCardUI with the local user's XUID as a fallback
+  auto user = kernel_state()->xam_state()->GetUserProfile(user_index);
+  if (!user) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+
+  xe::ui::ImGuiDrawer* imgui_drawer =
+      kernel_state()->emulator()->imgui_drawer();
+
+  auto close = [](ui::GamercardUI* dialog) -> void {};
+  auto* display_window = kernel_state()->emulator()->display_window();
+  auto* ks = kernel_state();
+  auto xuid = user->xuid();
+  return xeXamDispatchDialogAsync<ui::GamercardUI>(
+      [display_window, imgui_drawer, ks, xuid]() {
+        return new ui::GamercardUI(display_window, imgui_drawer, ks, xuid);
+      },
+      close);
+}
+DECLARE_XAM_EXPORT1(XamShowGamerCardUIForXUID, kUserProfiles, kStub);
+
+// Stub: XamShowPlayersUI (ordinal 0x2C8)
+dword_result_t XamShowPlayersUI_entry(dword_t user_index) {
+  XELOGI("XamShowPlayersUI({}) - stub", (uint32_t)user_index);
+  return xeXamDispatchHeadlessAsync([]() {});
+}
+DECLARE_XAM_EXPORT1(XamShowPlayersUI, kUserProfiles, kStub);
+
+// Stub: XamShowGameInviteUI (ordinal 0x2CD)
+dword_result_t XamShowGameInviteUI_entry(dword_t user_index,
+                                         qword_t xuid_group,
+                                         dword_t cPlayers,
+                                         lpdword_t pXuidRecipients) {
+  XELOGI("XamShowGameInviteUI({}, {:016X}, {}) - stub",
+         (uint32_t)user_index, (uint64_t)xuid_group, (uint32_t)cPlayers);
+  return xeXamDispatchHeadlessAsync([]() {});
+}
+DECLARE_XAM_EXPORT1(XamShowGameInviteUI, kUserProfiles, kStub);
 
 }  // namespace xam
 }  // namespace kernel

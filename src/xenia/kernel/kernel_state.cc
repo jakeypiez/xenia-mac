@@ -919,10 +919,13 @@ void KernelState::RegisterNotifyListener(XNotifyListener* listener) {
   }
   if (!has_notified_live_startup_ && listener->mask() & kXNotifyLive) {
     has_notified_live_startup_ = true;
-    // X_ONLINE_S_LOGON_DISCONNECTED
+    // X_ONLINE_S_LOGON_CONNECTION_ESTABLISHED
+    // Always report connected — XLiveAPI::Init() will have initialized by the
+    // time the game actually uses the network, and XLiveBaseLogonGetHR also
+    // returns ESTABLISHED unconditionally.
     listener->EnqueueNotification(kXNotificationLiveConnectionChanged,
-                                  0x001510F1L);
-    listener->EnqueueNotification(kXNotificationLiveLinkStateChanged, 0);
+                                  0x001510F0L);
+    listener->EnqueueNotification(kXNotificationLiveLinkStateChanged, 1);
   }
 }
 
