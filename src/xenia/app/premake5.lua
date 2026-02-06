@@ -257,6 +257,7 @@ project("xenia-app")
       sdl2_libdir,
       lz4_libdir,
       "/usr/local/opt/openssl@3/lib",
+      "/opt/homebrew/opt/openssl@3/lib",
     })
     linkoptions({
       path.join(dxilconv_libdir, "libdxilconv.dylib"),

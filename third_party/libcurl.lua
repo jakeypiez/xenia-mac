@@ -43,9 +43,11 @@ project("libcurl")
     })
     sysincludedirs({
       "/usr/local/opt/openssl@3/include",
+      "/opt/homebrew/opt/openssl@3/include",
     })
     libdirs({
       "/usr/local/opt/openssl@3/lib",
+      "/opt/homebrew/opt/openssl@3/lib",
     })
     links({
       "ssl",
