@@ -204,7 +204,7 @@ EmulatorWindow::EmulatorWindow(Emulator* emulator,
 #ifdef XE_BUILD_IS_PR
                 "PR#" XE_BUILD_PR_NUMBER " - "
 #endif
-                XE_BUILD_BRANCH "@" XE_BUILD_COMMIT_SHORT " on " XE_BUILD_DATE
+                "xenia-mac-netplay" "@" XE_BUILD_COMMIT_SHORT " on " XE_BUILD_DATE
                 ")";
 
   LoadRecentlyLaunchedTitles();
@@ -898,7 +898,7 @@ bool EmulatorWindow::Initialize() {
     help_menu->AddChild(MenuItem::Create(
         MenuItem::Type::kString, "Recent changes on GitHub...", []() {
           LaunchWebBrowser(
-              "https://github.com/xenia-canary/xenia-canary/"
+              "https://github.com/jakeypiez/xenia-mac-netplay/"
               "compare/" XE_BUILD_COMMIT "..." XE_BUILD_BRANCH);
         }));
     help_menu->AddChild(MenuItem::Create(MenuItem::Type::kSeparator));
@@ -1895,7 +1895,7 @@ void EmulatorWindow::ToggleControllerVibration() {
 
 void EmulatorWindow::ShowCompatibility() {
   const std::string_view base_url =
-      "https://github.com/xenia-canary/game-compatibility/issues";
+      "https://github.com/jakeypiez/xenia-mac-netplay/issues";
   std::string url;
   // Avoid searching for a title ID of "00000000".
   uint32_t title_id = emulator_->title_id();
@@ -1908,16 +1908,16 @@ void EmulatorWindow::ShowCompatibility() {
 }
 
 void EmulatorWindow::ShowFAQ() {
-  LaunchWebBrowser("https://github.com/xenia-canary/xenia-canary/wiki/FAQ");
+  LaunchWebBrowser("https://github.com/jakeypiez/xenia-mac-netplay/wiki/FAQ");
 }
 
 void EmulatorWindow::ShowBuildCommit() {
 #ifdef XE_BUILD_IS_PR
   LaunchWebBrowser(
-      "https://github.com/xenia-canary/xenia-canary/pull/" XE_BUILD_PR_NUMBER);
+      "https://github.com/jakeypiez/xenia-mac-netplay/pull/" XE_BUILD_PR_NUMBER);
 #else
   LaunchWebBrowser(
-      "https://github.com/xenia-canary/xenia-canary/commit/" XE_BUILD_COMMIT);
+      "https://github.com/jakeypiez/xenia-mac-netplay/commit/" XE_BUILD_COMMIT);
 #endif
 }
 

@@ -155,7 +155,7 @@ Emulator::Emulator(const std::filesystem::path& command_line,
              "to open it?",
              L"Xenia", MB_YESNO | MB_ICONQUESTION) == IDYES)) {
       LaunchWebBrowser(
-          "https://github.com/xenia-canary/xenia-canary/wiki/"
+          "https://github.com/jakeypiez/xenia-mac-netplay/wiki/"
           "Quickstart#how-to-rip-games");
     }
     SetPersistentEmulatorFlags(persistent_flags |
