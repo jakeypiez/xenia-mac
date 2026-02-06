@@ -10,15 +10,14 @@ A macOS fork of [Xenia Canary](https://github.com/xenia-canary/xenia-canary) wit
 
 ## Features
 
-- **macOS native** — Metal GPU backend, Apple Silicon (ARM64) and Intel (x86_64)
+- **macOS native** — Metal GPU backend, Apple Silicon (ARM64)
 - **Xbox Live netplay** — Online multiplayer via [Xenia-WebServices](https://github.com/AdrianCassar/Xenia-WebServices) backend
 - **Systemlink** — LAN multiplayer without a backend server
 
 ## Requirements
 
-- **macOS 15.0+** (Sequoia) — required for Rosetta AVX support on Intel builds
-- **Apple Silicon** (M1/M2/M3/M4/M5) or Intel Mac
-- **Homebrew**: `brew install sdl2 lz4 openssl@3`
+- **macOS 15.0+** (Sequoia)
+- **Apple Silicon** (M1/M2/M3/M4/M5)
 
 ## Download
 
@@ -36,7 +35,6 @@ cd xenia-mac-netplay
 
 # Build
 ./xb build --arch=arm64          # Apple Silicon
-./xb build --arch=x86_64         # Intel Mac
 ./xb build --config=Release      # Release build (default is Debug)
 ```
 
@@ -46,10 +44,10 @@ See [docs/building.md](docs/building.md) for detailed build instructions.
 
 ```bash
 # Run a game (Xbox Live mode is default)
-./build/bin/Mac-ARM64/Release/Xenia-Mac-Netplay.app/Contents/MacOS/xenia "/path/to/game"
+./build/bin/Mac-ARM64/Release/Xenia.app/Contents/MacOS/xenia "/path/to/game"
 
 # Run with specific network mode
-./build/bin/Mac-ARM64/Release/Xenia-Mac-Netplay.app/Contents/MacOS/xenia \
+./build/bin/Mac-ARM64/Release/Xenia.app/Contents/MacOS/xenia \
   --network_mode=1 "/path/to/game"   # Systemlink (LAN)
 ```
 
