@@ -94,16 +94,31 @@ jobs:
           body: |
             ## Xenia ${{ steps.tag.outputs.tag }}
 
-            Xbox 360 emulator for macOS with netplay support.
+            Xbox 360 emulator for macOS with netplay/online multiplayer support.
+
+            ### Features
+            - **macOS native** — Metal GPU backend
+            - **Apple Silicon (ARM64)** — optimized for M-series chips
+            - **Xbox Live netplay** — online multiplayer via [Xenia-WebServices](https://github.com/AdrianCassar/Xenia-WebServices) backend
+            - **Systemlink** — LAN multiplayer without a backend server
+            - **UPnP port forwarding** — automatic with macOS Local Network permission handling
+            - **Network config UI** — in-app Network menu for server selection and settings
 
             ### Requirements
             - macOS 15.0+ (Sequoia)
             - Apple Silicon (M1/M2/M3/M4/M5)
+            - Homebrew runtime dependencies: `brew install sdl2 lz4 openssl@3`
 
             ### Install
             1. Download the `.dmg` file below
             2. Open the DMG and drag **Xenia** to Applications
             3. Right-click the app → Open (first launch only, to bypass Gatekeeper)
+
+            ### Credits
+            - [Ben Vanik](https://github.com/benvanik) — Original Xenia emulator
+            - [Xenia Canary](https://github.com/xenia-canary/xenia-canary) — Canary branch
+            - [wmarti](https://github.com/wmarti/xenia-mac) — macOS/Metal port
+            - [AdrianCassar](https://github.com/AdrianCassar/xenia-canary) — Netplay implementation (v5.0.0)
           files: Xenia-macOS-ARM64.dmg
           draft: false
           prerelease: false
