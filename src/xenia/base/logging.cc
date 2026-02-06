@@ -48,7 +48,11 @@ DEFINE_bool(log_to_logcat, true, "Write log output to Android Logcat.",
             "Logging");
 #else
 DEFINE_path(log_file, "", "Logs are written to the given file", "Logging");
+#ifdef NDEBUG
+DEFINE_bool(log_to_stdout, false, "Write log output to stdout", "Logging");
+#else
 DEFINE_bool(log_to_stdout, true, "Write log output to stdout", "Logging");
+#endif
 DEFINE_bool(log_to_debugprint, false, "Dump the log to DebugPrint.", "Logging");
 #endif  // XE_PLATFORM_ANDROID
 DEFINE_bool(flush_log, true, "Flush log file after each log line batch.",
@@ -59,10 +63,17 @@ DEFINE_uint32(log_mask, 0,
               "Kernel = 1, Apu = 2, Cpu = 4, Gpu = 8.",
               "Logging");
 
+#ifdef NDEBUG
+DEFINE_int32(
+    log_level, 1,
+    "Maximum level to be logged. (0=error, 1=warning, 2=info, 3=debug)",
+    "Logging");
+#else
 DEFINE_int32(
     log_level, 2,
     "Maximum level to be logged. (0=error, 1=warning, 2=info, 3=debug)",
     "Logging");
+#endif
 
 namespace dp = disruptorplus;
 using namespace xe::literals;

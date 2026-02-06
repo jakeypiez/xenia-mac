@@ -385,9 +385,9 @@ project("xenia-app")
     xcodebuildsettings({
       ["INFOPLIST_FILE"] = info_plist_path,
       ["MACOSX_DEPLOYMENT_TARGET"] = "15.0",
-      ["PRODUCT_NAME"] = "Xenia-Canary",
+      ["PRODUCT_NAME"] = "Xenia-Mac-Netplay",
       ["EXECUTABLE_NAME"] = "xenia",
-      ["PRODUCT_BUNDLE_IDENTIFIER"] = "com.xenia.xenia",
+      ["PRODUCT_BUNDLE_IDENTIFIER"] = "com.jakeypiez.xenia-mac-netplay",
       ["CODE_SIGN_STYLE"] = "Automatic",
       ["CODE_SIGN_ENTITLEMENTS"] = entitlements_path,
     })
